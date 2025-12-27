@@ -1,5 +1,3 @@
-print("Game GUI script loaded (WindUI - Fixed ESP + Box ESP with Beams + Rejoin)")
-
 -- Load WindUI
 local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
 
@@ -170,6 +168,7 @@ ConfigSection:Button({
 -- Variables
 local fuselageMultiplier = 100
 local wingsMultiplier = 100
+local rageTransparency = 0.9
 
 local hitboxEnabled = false
 local hitboxTeamCheck = true
@@ -182,6 +181,7 @@ local filledHighlights = {}
 local boxBeamContainers = {}
 
 local originalSizes = {}
+local rageHitParts = {}
 
 -- ESP Team Check variables
 local filledEspTeamCheck = true
@@ -231,6 +231,34 @@ local friendsSet = {} -- keyed by player name
 local friendHighlights = {} -- keyed by player name -> Highlight instance
 local friendsLogs = {}
 local FriendsLogsInput = nil
+
+-- RWR, Responsiveness, Noclip
+local rwrEnabled = false
+local rwrGui = nil
+
+local maxRespEnabled = false
+local originalResponsiveness = nil
+local maxRespKeepConn = nil
+
+local noclipEnabled = false
+local noclipKey = "N"
+local noclipOriginals = {} -- part -> {CanCollide, CanTouch, CanQuery}
+local noclipToggleControl = nil
+local noclipKeybindControl = nil
+
+-- TriangleTerrain no-collide
+local terrainNoCollideEnabled = false
+local terrainOriginals = {} -- part -> {CanCollide, CanTouch, CanQuery}
+local terrainEnforceConn = nil
+
+-- Prediction ESP (2D circle) variables
+local predictionEnabled = false
+local predictionLeadTime = 0.2
+local predictionCircleSize = 48
+local predictionGui = nil
+local predictionCircles = {} -- model -> Frame
+local predictionProjectileSpeed = nil -- optional, unused for now
+local prevSeatData = {} -- model -> {pos = Vector3, t = number}
 
 -- Cobra Spin state
 local cobraSpinEnabled = false
@@ -378,37 +406,100 @@ local function resetAllHitboxes()
             part.Size = orig
         end
     end
+    -- destroy any rage hit parts
+    for m, p in pairs(rageHitParts) do
+        pcall(function() if p and p.Parent then p:Destroy() end end)
+        rageHitParts[m] = nil
+    end
 end
 
 local function applyHitboxes()
     if not hitboxEnabled then return end
 
-    for _, child in ipairs(getOtherPlayerModels()) do
-        if child and child:IsA("Model") then
-            -- Skip friends from hitbox modifications
-            if friendsSet[child.Name] then
-                continue
+    -- Get all other players' plane models
+    for _, model in ipairs(getOtherPlayerModels()) do
+        if not model or not model:IsA("Model") then continue end
+
+        -- Optional: skip friends
+        if friendsSet and friendsSet[model.Name] then
+            continue
+        end
+
+        -- Team check
+        local isEnemy = true
+        if hitboxTeamCheck and playerTeamName and teams then
+            if teams[playerTeamName] and teams[playerTeamName]:FindFirstChild(model.Name) then
+                isEnemy = false
             end
-            local isEnemy = not (playerTeamName and teams and teams[playerTeamName] and teams[playerTeamName]:FindFirstChild(child.Name))
+        end
+        if not isEnemy then continue end
 
-            if hitboxTeamCheck and not isEnemy then continue end
-
-            local fuselage = child:FindFirstChild("Fuselage", true)
-            if fuselage then
+        if hitboxMode == "Legit" then
+            -- Fuselage
+            local fuselage = model:FindFirstChild("Fuselage", true)
+            if fuselage and fuselage:IsA("BasePart") then
                 storeOriginalIfNeeded(fuselage)
-                fuselage.Size = originalSizes[fuselage] * (fuselageMultiplier / 100)
+                local newSize = originalSizes[fuselage] * (fuselageMultiplier / 100)
+                fuselage.Size = newSize
             end
 
-            local leftWing = child:FindFirstChild("LeftWing", true)
-            if leftWing then
+            -- Left Wing
+            local leftWing = model:FindFirstChild("LeftWing", true)
+            if leftWing and leftWing:IsA("BasePart") then
                 storeOriginalIfNeeded(leftWing)
-                leftWing.Size = originalSizes[leftWing] * (wingsMultiplier / 100)
+                local newSize = originalSizes[leftWing] * (wingsMultiplier / 100)
+                leftWing.Size = newSize
             end
 
-            local rightWing = child:FindFirstChild("RightWing", true)
-            if rightWing then
+            -- Right Wing
+            local rightWing = model:FindFirstChild("RightWing", true)
+            if rightWing and rightWing:IsA("BasePart") then
                 storeOriginalIfNeeded(rightWing)
-                rightWing.Size = originalSizes[rightWing] * (wingsMultiplier / 100)
+                local newSize = originalSizes[rightWing] * (wingsMultiplier / 100)
+                rightWing.Size = newSize
+            end
+
+            -- ensure no rage part remains
+            if rageHitParts[model] then
+                pcall(function() if rageHitParts[model] and rageHitParts[model].Parent then rageHitParts[model]:Destroy() end end)
+                rageHitParts[model] = nil
+            end
+
+        else
+            -- Rage mode: keep as block part (existing behavior)
+            local refPart = model.PrimaryPart or model:FindFirstChild("Fuselage", true) or model:FindFirstChildWhichIsA("BasePart")
+            if refPart then
+                local baseSize = 8
+                local scale = math.max(0.05, fuselageMultiplier / 100)
+                local sizeStuds = math.max(1, baseSize * scale)
+                pcall(function()
+                    local rp = rageHitParts[model]
+                    if not rp or not rp.Parent then
+                        rp = Instance.new("Part")
+                        rp.Name = "Rage_HitPart"
+                        rp.Anchored = false
+                        rp.CanCollide = false
+                        rp.Transparency = rageTransparency
+                        rp.Massless = true
+                        rp.Parent = model
+                        rageHitParts[model] = rp
+                    end
+                    rp.Size = Vector3.new(sizeStuds, sizeStuds, sizeStuds)
+                    rp.CFrame = refPart.CFrame
+                    pcall(function() rp.Transparency = rageTransparency end)
+                    if not rp:FindFirstChild("_rage_weld") then
+                        local weld = Instance.new("WeldConstraint")
+                        weld.Name = "_rage_weld"
+                        weld.Part0 = rp
+                        weld.Part1 = refPart
+                        weld.Parent = rp
+                    else
+                        local weld = rp:FindFirstChild("_rage_weld")
+                        if weld and weld:IsA("WeldConstraint") then
+                            weld.Part1 = refPart
+                        end
+                    end
+                end)
             end
         end
     end
@@ -1226,6 +1317,408 @@ local function appendFriendLog(msg)
     end
 end
 
+-- Ensure RWR GUI exists (top-center indicator)
+local function ensureRWRGui()
+    if rwrGui and rwrGui.Parent then return end
+    local playerGui = player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui")
+    if not playerGui then return end
+    rwrGui = Instance.new("ScreenGui")
+    rwrGui.Name = "RWR_GUI"
+    rwrGui.ResetOnSpawn = false
+    rwrGui.IgnoreGuiInset = true
+    rwrGui.Parent = playerGui
+
+    local frame = Instance.new("Frame")
+    frame.Name = "RWR_Frame"
+    frame.Size = UDim2.new(0.4, 0, 0, 36)
+    frame.Position = UDim2.new(0.5, -0.2 * workspace.CurrentCamera.ViewportSize.X, 0, 8)
+    frame.AnchorPoint = Vector2.new(0.5, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    frame.BackgroundTransparency = 0
+    frame.BorderSizePixel = 0
+    frame.Parent = rwrGui
+
+    local label = Instance.new("TextLabel")
+    label.Name = "RWR_Label"
+    label.Size = UDim2.new(1, -8, 1, -8)
+    label.Position = UDim2.new(0, 4, 0, 4)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(0, 0, 0)
+    label.Font = Enum.Font.SourceSansBold
+    label.TextSize = 18
+    label.Text = "RADAR: CLEAR"
+    label.Parent = frame
+end
+
+local function clearRWRGui()
+    if rwrGui then
+        pcall(function() rwrGui:Destroy() end)
+        rwrGui = nil
+    end
+end
+
+-- Simple aiming detection: raycast from other model's Fuselage forward towards local plane model
+-- Simple aiming detection: check specific gun cursor part under camera.plane_viewmodels
+local function isGunCursorAimingAtLocal(model)
+    if not model then return false, nil end
+    local cam = workspace.CurrentCamera or workspace:FindFirstChild("Camera")
+    if not cam then return false, nil end
+
+    -- find local plane model under camera.plane_model
+    local localPlane = nil
+    local pm_local = cam:FindFirstChild("plane_model")
+    if pm_local then
+        for _, c in ipairs(pm_local:GetChildren()) do
+            if c:IsA("Model") then
+                localPlane = c
+                break
+            end
+        end
+    end
+    if not localPlane then return false, nil end
+
+    -- find the corresponding viewmodel under camera.plane_viewmodels
+    local viewmodels = cam:FindFirstChild("plane_viewmodels")
+    local vm = nil
+    if viewmodels then
+        vm = viewmodels:FindFirstChild(model.Name)
+    end
+    if not vm then
+        -- fallback: try searching model itself for the cursor part
+        vm = model
+    end
+
+    -- look for gun_3d_cursor_part under vm (recursive)
+    local cursorPart = nil
+    for _, d in ipairs(vm:GetDescendants()) do
+        if d.Name == "gun_3d_cursor_part" and d:IsA("BasePart") then
+            cursorPart = d
+            break
+        end
+    end
+    -- Also accept MeshPart
+    if not cursorPart and vm then
+        for _, d in ipairs(vm:GetDescendants()) do
+            if d.Name == "gun_3d_cursor_part" and d:IsA("MeshPart") then
+                cursorPart = d
+                break
+            end
+        end
+    end
+    if not cursorPart then return false, nil end
+
+    local origin = cursorPart.Position
+    local dir = cursorPart.CFrame.LookVector
+    if not dir or dir.Magnitude == 0 then return false, nil end
+
+    local rayParams = RaycastParams.new()
+    rayParams.FilterDescendantsInstances = {vm}
+    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+    local maxDist = 5000
+    local result = workspace:Raycast(origin, dir * maxDist, rayParams)
+    if result and result.Instance and result.Instance:IsDescendantOf(localPlane) then
+        return true, model
+    end
+    return false, nil
+end
+
+local function updateRWRStatus()
+    if not rwrEnabled or not rwrGui then return end
+    local label = rwrGui:FindFirstChild("RWR_Frame") and rwrGui.RWR_Frame:FindFirstChild("RWR_Label")
+    if not label then return end
+
+    local foundAimer = nil
+    for _, m in ipairs(getOtherPlayerModels()) do
+        local ok, aiming, who = pcall(function() return isGunCursorAimingAtLocal(m) end)
+        if ok and aiming and who then
+            foundAimer = who
+            break
+        end
+    end
+
+    if foundAimer then
+        rwrGui.RWR_Frame.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        rwrGui.RWR_Frame.RWR_Label.Text = (foundAimer.Name or "PLAYER") .. " IS AIMING AT YOU!"
+        rwrGui.RWR_Frame.RWR_Label.TextColor3 = Color3.fromRGB(255,255,255)
+    else
+        rwrGui.RWR_Frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        rwrGui.RWR_Frame.RWR_Label.Text = "RADAR: CLEAR"
+        rwrGui.RWR_Frame.RWR_Label.TextColor3 = Color3.fromRGB(0,0,0)
+    end
+end
+
+-- Prediction ESP GUI helpers
+local function ensurePredictionGui()
+    if predictionGui and predictionGui.Parent then return end
+    local playerGui = player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui")
+    if not playerGui then return end
+    predictionGui = Instance.new("ScreenGui")
+    predictionGui.Name = "PredictionESP"
+    predictionGui.ResetOnSpawn = false
+    predictionGui.Parent = playerGui
+end
+
+local function clearPredictionGui()
+    if predictionGui then
+        pcall(function() predictionGui:Destroy() end)
+        predictionGui = nil
+    end
+    predictionCircles = {}
+end
+
+local function createCircleForModel(model)
+    if not predictionGui then ensurePredictionGui() end
+    if not predictionGui then return nil end
+    if predictionCircles[model] and predictionCircles[model].Parent then return predictionCircles[model] end
+    local size = predictionCircleSize
+    local frame = Instance.new("Frame")
+    frame.Name = "PredCircle_" .. tostring(model.Name)
+    frame.Size = UDim2.new(0, size, 0, size)
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    frame.BackgroundTransparency = 0.6
+    frame.BorderSizePixel = 0
+    frame.Parent = predictionGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(1, 0)
+    corner.Parent = frame
+
+    local label = Instance.new("TextLabel")
+    label.Name = "PredName"
+    label.Size = UDim2.new(1, 0, 0, 16)
+    label.Position = UDim2.new(0, 0, 1, 2)
+    label.BackgroundTransparency = 1
+    label.Text = tostring(model.Name)
+    label.TextColor3 = Color3.fromRGB(255,255,255)
+    label.TextSize = 14
+    label.Font = Enum.Font.SourceSansBold
+    label.Parent = frame
+
+    predictionCircles[model] = frame
+    return frame
+end
+
+local function updatePredictionESP()
+    if not predictionEnabled then return end
+    if not camera then camera = workspace.CurrentCamera end
+    if not camera then return end
+
+    for _, model in ipairs(getOtherPlayerModels()) do
+        if not (model and model:IsA("Model")) then
+            -- ignore invalid entries
+        else
+            -- skip friends and teammates; only show for enemies
+            local isEnemy = not (playerTeamName and teams and teams[playerTeamName] and teams[playerTeamName]:FindFirstChild(model.Name))
+            if not isEnemy then
+                if predictionCircles[model] then
+                    pcall(function() predictionCircles[model]:Destroy() end)
+                    predictionCircles[model] = nil
+                end
+            else
+                -- prefer Seat CFrame from camera viewmodels for velocity
+                local cam = workspace.CurrentCamera or workspace:FindFirstChild("Camera")
+                local seatPart = nil
+                if cam then
+                    local vmFolder = cam:FindFirstChild("plane_viewmodels") or playerFolder
+                    if vmFolder then
+                        local vm = vmFolder:FindFirstChild(model.Name)
+                        if vm and vm:IsA("Model") then
+                            seatPart = vm:FindFirstChild("Seat", true)
+                        end
+                    end
+                end
+                -- fallback: look inside model
+                if not seatPart then
+                    seatPart = model:FindFirstChild("Seat", true) or model:FindFirstChild("Fuselage", true) or model.PrimaryPart
+                end
+
+                if not seatPart or not seatPart:IsA("BasePart") then
+                    if predictionCircles[model] then
+                        pcall(function() predictionCircles[model]:Destroy() end)
+                        predictionCircles[model] = nil
+                    end
+                else
+                    local now = tick()
+                    local pos = seatPart.CFrame.Position
+                    local vel = Vector3.new(0,0,0)
+                    local prev = prevSeatData[model]
+                    if prev and prev.pos and prev.t and now > prev.t then
+                        local dt = math.max(0.0001, now - prev.t)
+                        vel = (pos - prev.pos) / dt
+                    else
+                        pcall(function() vel = seatPart.Velocity or seatPart.AssemblyLinearVelocity or vel end)
+                    end
+                    prevSeatData[model] = { pos = pos, t = now }
+
+                    local lead = predictionLeadTime
+                    local predPos = pos + vel * lead
+                    local screenPos, onScreen = camera:WorldToViewportPoint(predPos)
+                    local x, y = screenPos.X, screenPos.Y
+
+                    if onScreen then
+                        local frame = predictionCircles[model] or createCircleForModel(model)
+                        if frame and frame.Parent then
+                            local size = predictionCircleSize
+                            frame.Size = UDim2.new(0, size, 0, size)
+                            frame.Position = UDim2.new(0, x, 0, y)
+                            if frame:FindFirstChild("PredName") then
+                                frame.PredName.Text = model.Name
+                            end
+                        end
+                    else
+                        if predictionCircles[model] then
+                            pcall(function() predictionCircles[model]:Destroy() end)
+                            predictionCircles[model] = nil
+                        end
+                    end
+                end
+            end
+        end
+    end
+    -- cleanup entries for models that no longer exist
+    for m, f in pairs(predictionCircles) do
+        if not m or not m.Parent then
+            pcall(function() f:Destroy() end)
+            predictionCircles[m] = nil
+        end
+    end
+end
+
+-- Max Responsiveness control
+local function setMaxResponsiveness(state)
+    maxRespEnabled = state
+    local ok, gyro = pcall(findGyroAlignOrientation)
+    if not ok then gyro = nil end
+    if gyro and gyro:IsA("AlignOrientation") then
+        if state then
+            if originalResponsiveness == nil then
+                originalResponsiveness = gyro.Responsiveness
+            end
+            pcall(function() gyro.Responsiveness = 10000 end)
+            -- keep it forced
+            if not maxRespKeepConn then
+                maxRespKeepConn = game:GetService("RunService").RenderStepped:Connect(function()
+                    if maxRespEnabled and gyro and gyro.Parent then
+                        pcall(function() gyro.Responsiveness = 10000 end)
+                    end
+                end)
+            end
+        else
+            if maxRespKeepConn then
+                pcall(function() maxRespKeepConn:Disconnect() end)
+                maxRespKeepConn = nil
+            end
+            if gyro and originalResponsiveness then
+                pcall(function() gyro.Responsiveness = originalResponsiveness end)
+            end
+            originalResponsiveness = nil
+        end
+    end
+end
+
+-- Noclip functions
+local function applyNoclipToModel(model)
+    if not model then return end
+    for _, part in ipairs(model:GetDescendants()) do
+        if part:IsA("BasePart") then
+            if not noclipOriginals[part] then
+                noclipOriginals[part] = {CanCollide = part.CanCollide, CanTouch = part.CanTouch, CanQuery = part.CanQuery}
+            end
+            pcall(function()
+                part.CanCollide = false
+                part.CanTouch = false
+                part.CanQuery = false
+            end)
+        end
+    end
+end
+
+local function restoreNoclipFromModel(model)
+    if not model then return end
+    for _, part in ipairs(model:GetDescendants()) do
+        if part:IsA("BasePart") and noclipOriginals[part] then
+            local orig = noclipOriginals[part]
+            pcall(function()
+                part.CanCollide = orig.CanCollide
+                part.CanTouch = orig.CanTouch
+                part.CanQuery = orig.CanQuery
+            end)
+            noclipOriginals[part] = nil
+        end
+    end
+end
+
+local function setNoclip(state)
+    noclipEnabled = state
+    local cam = workspace.CurrentCamera or workspace:FindFirstChild("Camera")
+    if not cam then return end
+    local pm = cam:FindFirstChild("plane_model")
+    if not pm then return end
+    for _, model in ipairs(pm:GetChildren()) do
+        if model and model:IsA("Model") then
+            if state then
+                applyNoclipToModel(model)
+            else
+                restoreNoclipFromModel(model)
+            end
+        end
+    end
+end
+
+local function setTerrainNoCollide(state)
+    terrainNoCollideEnabled = state
+    local tri = workspace:FindFirstChild("TriangleTerrain")
+    if not tri then return end
+    if state then
+        -- store originals and disable collisions on all parts under TriangleTerrain
+        for _, part in ipairs(tri:GetDescendants()) do
+            if part:IsA("BasePart") then
+                if not terrainOriginals[part] then
+                    terrainOriginals[part] = { CanCollide = part.CanCollide, CanTouch = part.CanTouch, CanQuery = part.CanQuery }
+                end
+                pcall(function()
+                    part.CanCollide = false
+                    part.CanTouch = false
+                    part.CanQuery = false
+                end)
+            end
+        end
+        if not terrainEnforceConn then
+            terrainEnforceConn = game:GetService("RunService").RenderStepped:Connect(function()
+                pcall(function()
+                    if tri and tri.Parent then
+                        for _, part in ipairs(tri:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.CanCollide = false
+                                part.CanTouch = false
+                                part.CanQuery = false
+                            end
+                        end
+                    end
+                end)
+            end)
+        end
+    else
+        if terrainEnforceConn then
+            pcall(function() terrainEnforceConn:Disconnect() end)
+            terrainEnforceConn = nil
+        end
+        -- restore originals
+        for part, orig in pairs(terrainOriginals) do
+            if part and part.Parent then
+                pcall(function()
+                    part.CanCollide = orig.CanCollide
+                    part.CanTouch = orig.CanTouch
+                    part.CanQuery = orig.CanQuery
+                end)
+            end
+            terrainOriginals[part] = nil
+        end
+        terrainOriginals = {}
+    end
+end
+
 local function updateFriendsScan()
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= player then
@@ -1247,6 +1740,30 @@ local function updateFriendsScan()
                         hl.Parent = model
                         table.insert(filledHighlights, hl)
                         friendHighlights[p.Name] = hl
+                        -- Create full blue box ESP for friend (if not already)
+                        if not boxBeamContainers[model] then
+                            local container = createBoxAroundModel(model)
+                            if container then
+                                for _, epart in ipairs(container:GetChildren()) do
+                                    if epart:IsA("BasePart") and epart.Name:match("^Edge_%d+_%d+") then
+                                        epart.Color = Color3.fromRGB(0,170,255)
+                                    end
+                                end
+                                boxBeamContainers[model] = container
+                            end
+                        end
+                        -- Attempt snapline to friend (blue)
+                        pcall(function()
+                            local localFus, _ = getLocalFuselage()
+                            local targetFus = model:FindFirstChild("Fuselage", true)
+                            if localFus and targetFus and not snaplineContainers[model] then
+                                local folder, beam = createSnaplineBetween(localFus, targetFus, model)
+                                if folder and beam then
+                                    beam.Color = ColorSequence.new(Color3.fromRGB(0,170,255))
+                                    snaplineContainers[model] = folder
+                                end
+                            end
+                        end)
                     end
                 end
             elseif (not isFriend) and friendsSet[p.Name] then
@@ -1274,6 +1791,13 @@ Players.PlayerRemoving:Connect(function(p)
         if friendHighlights[p.Name] then
             pcall(function() friendHighlights[p.Name]:Destroy() end)
             friendHighlights[p.Name] = nil
+        end
+        -- remove any box ESP created for this friend's model(s)
+        for model, folder in pairs(boxBeamContainers) do
+            if model and model.Name == p.Name then
+                if folder then pcall(function() folder:Destroy() end) end
+                boxBeamContainers[model] = nil
+            end
         end
     end
 end)
@@ -1306,6 +1830,177 @@ MainTab:Slider({
     end
 })
 
+-- Teleport Section (added above Team Checks)
+MainTab:Section({ Title = "Teleport" })
+
+local teleportEnabled = false
+local teleportKey = "T"
+local teleportDistance = 50
+
+MainTab:Toggle({
+    Flag = "TeleportToggle",
+    Title = "Enable Teleport",
+    Value = false,
+    Callback = function(state)
+        teleportEnabled = state
+    end
+})
+
+MainTab:Keybind({
+    Flag = "TeleportKey",
+    Title = "Teleport Key",
+    Value = "T",
+    Callback = function(v)
+        if type(v) == "string" and #v > 0 then
+            teleportKey = v:upper()
+        end
+    end
+})
+
+MainTab:Slider({
+    Flag = "TeleportDistance",
+    Title = "Teleport Distance (studs)",
+    Value = { Min = 5, Max = 500, Default = 50 },
+    Step = 1,
+    Callback = function(val)
+        teleportDistance = math.clamp(val or 50, 5, 500)
+    end
+})
+
+-- helper: safe getNil using provided global helper if available
+local function getNilLocal(name, class)
+    if type(getnilinstances) == "function" then
+        for _, v in next, getnilinstances() do
+            if v and v.ClassName == class and v.Name == name then
+                return v
+            end
+        end
+    end
+    return nil
+end
+
+-- Input handlers: teleport and FOV zoom
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local zoomedIn = false
+local activeZoomTween = nil
+local function doTeleport()
+    if not teleportEnabled then return end
+    local cam = workspace.CurrentCamera or workspace:FindFirstChild("Camera")
+    local moved = false
+
+    -- helper to move a model or part forward based on its own forward vector
+    local function moveForward(inst)
+        if not inst then return end
+        if inst:IsA("Model") then
+            local ref = inst.PrimaryPart or inst:FindFirstChildWhichIsA("BasePart")
+            if ref then
+                local forward = ref.CFrame.LookVector * teleportDistance
+                if inst.PrimaryPart then
+                    inst:SetPrimaryPartCFrame(inst.PrimaryPart.CFrame + forward)
+                else
+                    for _, p in ipairs(inst:GetDescendants()) do
+                        if p:IsA("BasePart") then
+                            p.CFrame = p.CFrame + forward
+                        end
+                    end
+                end
+                moved = true
+            end
+        elseif inst:IsA("BasePart") then
+            local forward = inst.CFrame.LookVector * teleportDistance
+            inst.CFrame = inst.CFrame + forward
+            moved = true
+        end
+    end
+
+    -- move the player's plane model under Camera.plane_model (e.g., MiG17F)
+    if cam then
+        local pm = cam:FindFirstChild("plane_model")
+        if pm and pm:IsA("Model") or pm and typeof(pm) == "Instance" then
+            -- try to find a model matching player name, otherwise MiG17F, otherwise any model
+            local targetModel = nil
+            if pm:FindFirstChild(player.Name) then
+                targetModel = pm:FindFirstChild(player.Name)
+            elseif pm:FindFirstChild("MiG17F") then
+                targetModel = pm:FindFirstChild("MiG17F")
+            else
+                for _, c in ipairs(pm:GetChildren()) do
+                    if c:IsA("Model") then targetModel = c; break end
+                end
+            end
+            if targetModel then
+                pcall(function() moveForward(targetModel) end)
+            end
+        end
+
+        -- move targ_holder and targ_holder2 under Camera.Ignore if present
+        local ign = cam:FindFirstChild("Ignore")
+        if ign then
+            local h1 = ign:FindFirstChild("targ_holder") or getNilLocal("targ_holder", "Part")
+            local h2 = ign:FindFirstChild("targ_holder2") or getNilLocal("targ_holder2", "Part")
+            pcall(function() moveForward(h1) end)
+            pcall(function() moveForward(h2) end)
+        end
+    end
+
+    -- fallback: move humanoid root part if nothing else moved
+    if not moved then
+        local char = player and (player.Character or (player.CharacterAdded and player.Character)) or nil
+        if char then
+            local hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+            if hrp and hrp:IsA("BasePart") then
+                pcall(function()
+                    hrp.CFrame = hrp.CFrame + hrp.CFrame.LookVector * teleportDistance
+                end)
+            end
+        end
+    end
+end
+
+local function setCameraFOV(targetFov)
+    if not camera then camera = workspace.CurrentCamera end
+    if not camera then return end
+    pcall(function()
+        if activeZoomTween then
+            pcall(function() activeZoomTween:Cancel() end)
+            activeZoomTween = nil
+        end
+        local ti = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        activeZoomTween = TweenService:Create(camera, ti, { FieldOfView = targetFov })
+        activeZoomTween:Play()
+    end)
+end
+-- Single unified input handler for teleport and zoom (ignores typing in textboxes)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        if UserInputService:GetFocusedTextBox() then return end
+        local name = input.KeyCode and input.KeyCode.Name or tostring(input.KeyCode)
+        if name == teleportKey and teleportEnabled then
+            pcall(doTeleport)
+            return
+        end
+        if name == "Z" and fovEnabled then
+            zoomedIn = not zoomedIn
+            if zoomedIn then
+                setCameraFOV(28)
+            else
+                setCameraFOV(fovValue or 70)
+            end
+        end
+    elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
+        if fovEnabled then
+            zoomedIn = not zoomedIn
+            if zoomedIn then
+                setCameraFOV(28)
+            else
+                setCameraFOV(fovValue or 70)
+            end
+        end
+    end
+end)
+
+-- Team Checks section follows
 MainTab:Section({ Title = "Team Checks" })
 
 MainTab:Toggle({
@@ -1351,8 +2046,64 @@ MainTab:Keybind({
     end
 })
 
+-- RWR and Utilities
+MainTab:Section({ Title = "RWR [Beta]" })
+MainTab:Toggle({
+    Flag = "RWR",
+    Title = "Enable RWR [Beta]",
+    Value = false,
+    Callback = function(state)
+        rwrEnabled = state
+        if state then
+            ensureRWRGui()
+        else
+            clearRWRGui()
+        end
+    end
+})
+
+MainTab:Section({ Title = "Utilities" })
+MainTab:Toggle({
+    Flag = "MaxResponsiveness",
+    Title = "Max Responsiveness",
+    Value = false,
+    Callback = function(state)
+        setMaxResponsiveness(state)
+    end
+})
+
+MainTab:Button({
+    Title = "Max Responsiveness (One-shot)",
+    Callback = function()
+        local ok, gyro = pcall(findGyroAlignOrientation)
+        if ok and gyro and gyro:IsA("AlignOrientation") then
+            pcall(function()
+                if originalResponsiveness == nil then originalResponsiveness = gyro.Responsiveness end
+                gyro.Responsiveness = 10000
+            end)
+            WindUI:Notify({ Title = "MaxResp", Content = "Set Responsiveness to max (one-shot)" })
+        else
+            WindUI:Notify({ Title = "MaxResp", Content = "Gyro not found" })
+        end
+    end
+})
+
+-- Noclip toggle + keybind
+-- noclip UI removed per user request; TriangleTerrain toggle handles map parts instead
+
+-- Terrain CanCollide toggle
+MainTab:Section({ Title = "Terrain" })
+MainTab:Toggle({
+    Flag = "TerrainNoCollide",
+    Title = "Disable Terrain CanCollide",
+    Value = false,
+    Callback = function(state)
+        setTerrainNoCollide(state)
+    end,
+})
+
 -- Logs section in Input tab (first thing)
-InputTab:Section({ Title = "Log s" })
+InputTab:Section({ Title = "Logs" })
 -- Try to create a multiline TextArea/TextBox via WindUI; fallback to Input if unavailable
 local function createLogsControl(tab)
     local ctrl = nil
@@ -1559,6 +2310,42 @@ ESPTab:Slider({
     end
 })
 
+    -- Prediction ESP controls
+    ESPTab:Section({ Title = "Prediction ESP" })
+    ESPTab:Toggle({
+        Flag = "PredictionESP",
+        Title = "Enable Prediction ESP (2D)",
+        Value = false,
+        Callback = function(state)
+            predictionEnabled = state
+            if state then
+                ensurePredictionGui()
+            else
+                clearPredictionGui()
+            end
+        end,
+    })
+
+    ESPTab:Slider({
+        Flag = "PredictionLead",
+        Title = "Lead Time (s)",
+        Value = { Min = 0, Max = 2, Default = 0.2 },
+        Step = 0.05,
+        Callback = function(val)
+            predictionLeadTime = val
+        end
+    })
+
+    ESPTab:Slider({
+        Flag = "PredictionSize",
+        Title = "Circle Size (px)",
+        Value = { Min = 8, Max = 128, Default = 48 },
+        Step = 1,
+        Callback = function(val)
+            predictionCircleSize = val
+        end
+    })
+
 HitboxTab:Section({ Title = "Hitbox Controls" })
 
 HitboxTab:Toggle({
@@ -1573,6 +2360,24 @@ HitboxTab:Toggle({
             applyHitboxes()
         end
     end
+})
+
+-- Hitbox Mode: Legit (existing) or Rage (resizes specific viewmodel parts)
+local hitboxMode = "Legit" -- or "Rage"
+HitboxTab:Dropdown({
+    Title = "Hitbox Mode",
+    Values = { "Legit", "Rage" },
+    Value = "Legit",
+    Callback = function(val)
+        if type(val) == "string" then
+            hitboxMode = val
+            if hitboxEnabled then
+                -- remove previous modifications and reapply in new mode
+                resetAllHitboxes()
+                applyHitboxes()
+            end
+        end
+    end,
 })
 
 HitboxTab:Slider({
@@ -1777,6 +2582,22 @@ HitboxTab:Slider({
     end
 })
 
+HitboxTab:Slider({
+    Flag = "RageHitboxTransparency",
+    Title = "Rage Hitbox Transparency (0 = opaque, 1 = invisible)",
+    Value = { Min = 0, Max = 1, Default = rageTransparency },
+    Step = 0.05,
+    Callback = function(val)
+        rageTransparency = math.clamp(val or 1, 0, 1)
+        -- update existing rage parts
+        for _, rp in pairs(rageHitParts) do
+            if rp and rp.Parent then
+                pcall(function() rp.Transparency = rageTransparency end)
+            end
+        end
+    end
+})
+
 local DangerSection = MainTab:Section({ Title = "Misc" })
 
 DangerSection:Button({
@@ -1803,21 +2624,95 @@ DangerSection:Button({
 DangerSection:Button({
     Title = "Reset All",
     Callback = function()
-        hitboxEnabled = false
-        filledEspEnabled = false
-        boxEspEnabled = false
-        lobbyEspEnabled = false
-        selfBoxEnabled = false
-        selfOutlineEnabled = false
+            -- disable main flags
+            hitboxEnabled = false
+            filledEspEnabled = false
+            boxEspEnabled = false
+            lobbyEspEnabled = false
+            selfBoxEnabled = false
+            selfOutlineEnabled = false
+            snaplineEnabled = false
+            predictionEnabled = false
+            rwrEnabled = false
+            terrainNoCollideEnabled = false
+            maxRespEnabled = false
+            noclipEnabled = false
+            teleportEnabled = false
+            rainbowAllEnabled = false
 
-        resetAllHitboxes()
-        clearFilledESP()
-        clearBoxESP()
-        clearLobbyESP()
-        clearSelfBox()
-        clearSelfOutline()
+            -- reset visual and hitbox state
+            resetAllHitboxes()
+            clearFilledESP()
+            clearBoxESP()
+            clearLobbyESP()
+            clearSelfBox()
+            clearSelfOutline()
+            clearSnaplines()
+            clearPredictionGui()
+            clearRWRGui()
 
-        WindUI:Notify({ Title = "Reset", Content = "All features disabled and reset!" })
+            -- stop rainbow task (flag cleared above will end it)
+
+            -- disconnect terrain enforcement and restore originals
+            pcall(function()
+                if terrainEnforceConn then terrainEnforceConn:Disconnect() end
+            end)
+            terrainEnforceConn = nil
+            for part, orig in pairs(terrainOriginals) do
+                if part and part.Parent then
+                    pcall(function()
+                        part.CanCollide = orig.CanCollide
+                        part.CanTouch = orig.CanTouch
+                        part.CanQuery = orig.CanQuery
+                    end)
+                end
+                terrainOriginals[part] = nil
+            end
+            terrainOriginals = {}
+
+            -- disconnect max responsiveness enforcement and restore gyro
+            pcall(function()
+                if maxRespKeepConn then maxRespKeepConn:Disconnect() end
+            end)
+            maxRespKeepConn = nil
+            if originalResponsiveness then
+                local ok, gyro = pcall(findGyroAlignOrientation)
+                if ok and gyro and gyro:IsA("AlignOrientation") then
+                    pcall(function() gyro.Responsiveness = originalResponsiveness end)
+                end
+            end
+            originalResponsiveness = nil
+
+            -- restore noclip for models under camera.plane_model
+            pcall(function()
+                local cam = workspace.CurrentCamera or workspace:FindFirstChild("Camera")
+                if cam then
+                    local pm = cam:FindFirstChild("plane_model")
+                    if pm then
+                        for _, m in ipairs(pm:GetChildren()) do
+                            if m and m:IsA("Model") then
+                                pcall(function() restoreNoclipFromModel(m) end)
+                            end
+                        end
+                    end
+                end
+            end)
+
+            -- clear helper containers
+            for k, v in pairs(boxBeamContainers) do
+                pcall(function() if v and v.Parent then v:Destroy() end end)
+                boxBeamContainers[k] = nil
+            end
+            for k, v in pairs(snaplineContainers) do
+                pcall(function() if v and v.Parent then v:Destroy() end end)
+                snaplineContainers[k] = nil
+            end
+            for k, v in pairs(predictionCircles) do
+                pcall(function() if v and v.Parent then v:Destroy() end end)
+                predictionCircles[k] = nil
+            end
+
+            WindUI:Notify({ Title = "Reset", Content = "All features disabled and reset!" })
     end
 })
 
@@ -1903,8 +2798,12 @@ game:GetService("RunService").RenderStepped:Connect(function()
             end 
             end
     end
+    -- RWR update
+    if rwrEnabled then
+        pcall(updateRWRStatus)
+    end
+    -- Prediction ESP update
+    if predictionEnabled then
+        pcall(updatePredictionESP)
+    end
 end)
-
---to do the next time
---fix hitbox on local playyer
---fix box esp, glow fill on local plauer
