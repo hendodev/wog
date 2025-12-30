@@ -168,7 +168,6 @@ ConfigSection:Button({
 -- Variables
 local fuselageMultiplier = 100
 local wingsMultiplier = 100
-local rageTransparency = 0.9
 
 local hitboxEnabled = false
 local hitboxTeamCheck = true
@@ -181,7 +180,6 @@ local filledHighlights = {}
 local boxBeamContainers = {}
 
 local originalSizes = {}
-local rageHitParts = {}
 
 -- ESP Team Check variables
 local filledEspTeamCheck = true
@@ -406,100 +404,37 @@ local function resetAllHitboxes()
             part.Size = orig
         end
     end
-    -- destroy any rage hit parts
-    for m, p in pairs(rageHitParts) do
-        pcall(function() if p and p.Parent then p:Destroy() end end)
-        rageHitParts[m] = nil
-    end
 end
 
 local function applyHitboxes()
     if not hitboxEnabled then return end
 
-    -- Get all other players' plane models
-    for _, model in ipairs(getOtherPlayerModels()) do
-        if not model or not model:IsA("Model") then continue end
-
-        -- Optional: skip friends
-        if friendsSet and friendsSet[model.Name] then
-            continue
-        end
-
-        -- Team check
-        local isEnemy = true
-        if hitboxTeamCheck and playerTeamName and teams then
-            if teams[playerTeamName] and teams[playerTeamName]:FindFirstChild(model.Name) then
-                isEnemy = false
+    for _, child in ipairs(getOtherPlayerModels()) do
+        if child and child:IsA("Model") then
+            -- Skip friends from hitbox modifications
+            if friendsSet[child.Name] then
+                continue
             end
-        end
-        if not isEnemy then continue end
+            local isEnemy = not (playerTeamName and teams and teams[playerTeamName] and teams[playerTeamName]:FindFirstChild(child.Name))
 
-        if hitboxMode == "Legit" then
-            -- Fuselage
-            local fuselage = model:FindFirstChild("Fuselage", true)
-            if fuselage and fuselage:IsA("BasePart") then
+            if hitboxTeamCheck and not isEnemy then continue end
+
+            local fuselage = child:FindFirstChild("Fuselage", true)
+            if fuselage then
                 storeOriginalIfNeeded(fuselage)
-                local newSize = originalSizes[fuselage] * (fuselageMultiplier / 100)
-                fuselage.Size = newSize
+                fuselage.Size = originalSizes[fuselage] * (fuselageMultiplier / 100)
             end
 
-            -- Left Wing
-            local leftWing = model:FindFirstChild("LeftWing", true)
-            if leftWing and leftWing:IsA("BasePart") then
+            local leftWing = child:FindFirstChild("LeftWing", true)
+            if leftWing then
                 storeOriginalIfNeeded(leftWing)
-                local newSize = originalSizes[leftWing] * (wingsMultiplier / 100)
-                leftWing.Size = newSize
+                leftWing.Size = originalSizes[leftWing] * (wingsMultiplier / 100)
             end
 
-            -- Right Wing
-            local rightWing = model:FindFirstChild("RightWing", true)
-            if rightWing and rightWing:IsA("BasePart") then
+            local rightWing = child:FindFirstChild("RightWing", true)
+            if rightWing then
                 storeOriginalIfNeeded(rightWing)
-                local newSize = originalSizes[rightWing] * (wingsMultiplier / 100)
-                rightWing.Size = newSize
-            end
-
-            -- ensure no rage part remains
-            if rageHitParts[model] then
-                pcall(function() if rageHitParts[model] and rageHitParts[model].Parent then rageHitParts[model]:Destroy() end end)
-                rageHitParts[model] = nil
-            end
-
-        else
-            -- Rage mode: keep as block part (existing behavior)
-            local refPart = model.PrimaryPart or model:FindFirstChild("Fuselage", true) or model:FindFirstChildWhichIsA("BasePart")
-            if refPart then
-                local baseSize = 8
-                local scale = math.max(0.05, fuselageMultiplier / 100)
-                local sizeStuds = math.max(1, baseSize * scale)
-                pcall(function()
-                    local rp = rageHitParts[model]
-                    if not rp or not rp.Parent then
-                        rp = Instance.new("Part")
-                        rp.Name = "Rage_HitPart"
-                        rp.Anchored = false
-                        rp.CanCollide = false
-                        rp.Transparency = rageTransparency
-                        rp.Massless = true
-                        rp.Parent = model
-                        rageHitParts[model] = rp
-                    end
-                    rp.Size = Vector3.new(sizeStuds, sizeStuds, sizeStuds)
-                    rp.CFrame = refPart.CFrame
-                    pcall(function() rp.Transparency = rageTransparency end)
-                    if not rp:FindFirstChild("_rage_weld") then
-                        local weld = Instance.new("WeldConstraint")
-                        weld.Name = "_rage_weld"
-                        weld.Part0 = rp
-                        weld.Part1 = refPart
-                        weld.Parent = rp
-                    else
-                        local weld = rp:FindFirstChild("_rage_weld")
-                        if weld and weld:IsA("WeldConstraint") then
-                            weld.Part1 = refPart
-                        end
-                    end
-                end)
+                rightWing.Size = originalSizes[rightWing] * (wingsMultiplier / 100)
             end
         end
     end
@@ -2362,24 +2297,6 @@ HitboxTab:Toggle({
     end
 })
 
--- Hitbox Mode: Legit (existing) or Rage (resizes specific viewmodel parts)
-local hitboxMode = "Legit" -- or "Rage"
-HitboxTab:Dropdown({
-    Title = "Hitbox Mode",
-    Values = { "Legit", "Rage" },
-    Value = "Legit",
-    Callback = function(val)
-        if type(val) == "string" then
-            hitboxMode = val
-            if hitboxEnabled then
-                -- remove previous modifications and reapply in new mode
-                resetAllHitboxes()
-                applyHitboxes()
-            end
-        end
-    end,
-})
-
 HitboxTab:Slider({
     Flag = "FuselageMultiplier",
     Title = "Fuselage Multiplier (%)",
@@ -2582,22 +2499,6 @@ HitboxTab:Slider({
     end
 })
 
-HitboxTab:Slider({
-    Flag = "RageHitboxTransparency",
-    Title = "Rage Hitbox Transparency (0 = opaque, 1 = invisible)",
-    Value = { Min = 0, Max = 1, Default = rageTransparency },
-    Step = 0.05,
-    Callback = function(val)
-        rageTransparency = math.clamp(val or 1, 0, 1)
-        -- update existing rage parts
-        for _, rp in pairs(rageHitParts) do
-            if rp and rp.Parent then
-                pcall(function() rp.Transparency = rageTransparency end)
-            end
-        end
-    end
-})
-
 local DangerSection = MainTab:Section({ Title = "Misc" })
 
 DangerSection:Button({
@@ -2624,95 +2525,21 @@ DangerSection:Button({
 DangerSection:Button({
     Title = "Reset All",
     Callback = function()
-            -- disable main flags
-            hitboxEnabled = false
-            filledEspEnabled = false
-            boxEspEnabled = false
-            lobbyEspEnabled = false
-            selfBoxEnabled = false
-            selfOutlineEnabled = false
-            snaplineEnabled = false
-            predictionEnabled = false
-            rwrEnabled = false
-            terrainNoCollideEnabled = false
-            maxRespEnabled = false
-            noclipEnabled = false
-            teleportEnabled = false
-            rainbowAllEnabled = false
+        hitboxEnabled = false
+        filledEspEnabled = false
+        boxEspEnabled = false
+        lobbyEspEnabled = false
+        selfBoxEnabled = false
+        selfOutlineEnabled = false
 
-            -- reset visual and hitbox state
-            resetAllHitboxes()
-            clearFilledESP()
-            clearBoxESP()
-            clearLobbyESP()
-            clearSelfBox()
-            clearSelfOutline()
-            clearSnaplines()
-            clearPredictionGui()
-            clearRWRGui()
+        resetAllHitboxes()
+        clearFilledESP()
+        clearBoxESP()
+        clearLobbyESP()
+        clearSelfBox()
+        clearSelfOutline()
 
-            -- stop rainbow task (flag cleared above will end it)
-
-            -- disconnect terrain enforcement and restore originals
-            pcall(function()
-                if terrainEnforceConn then terrainEnforceConn:Disconnect() end
-            end)
-            terrainEnforceConn = nil
-            for part, orig in pairs(terrainOriginals) do
-                if part and part.Parent then
-                    pcall(function()
-                        part.CanCollide = orig.CanCollide
-                        part.CanTouch = orig.CanTouch
-                        part.CanQuery = orig.CanQuery
-                    end)
-                end
-                terrainOriginals[part] = nil
-            end
-            terrainOriginals = {}
-
-            -- disconnect max responsiveness enforcement and restore gyro
-            pcall(function()
-                if maxRespKeepConn then maxRespKeepConn:Disconnect() end
-            end)
-            maxRespKeepConn = nil
-            if originalResponsiveness then
-                local ok, gyro = pcall(findGyroAlignOrientation)
-                if ok and gyro and gyro:IsA("AlignOrientation") then
-                    pcall(function() gyro.Responsiveness = originalResponsiveness end)
-                end
-            end
-            originalResponsiveness = nil
-
-            -- restore noclip for models under camera.plane_model
-            pcall(function()
-                local cam = workspace.CurrentCamera or workspace:FindFirstChild("Camera")
-                if cam then
-                    local pm = cam:FindFirstChild("plane_model")
-                    if pm then
-                        for _, m in ipairs(pm:GetChildren()) do
-                            if m and m:IsA("Model") then
-                                pcall(function() restoreNoclipFromModel(m) end)
-                            end
-                        end
-                    end
-                end
-            end)
-
-            -- clear helper containers
-            for k, v in pairs(boxBeamContainers) do
-                pcall(function() if v and v.Parent then v:Destroy() end end)
-                boxBeamContainers[k] = nil
-            end
-            for k, v in pairs(snaplineContainers) do
-                pcall(function() if v and v.Parent then v:Destroy() end end)
-                snaplineContainers[k] = nil
-            end
-            for k, v in pairs(predictionCircles) do
-                pcall(function() if v and v.Parent then v:Destroy() end end)
-                predictionCircles[k] = nil
-            end
-
-            WindUI:Notify({ Title = "Reset", Content = "All features disabled and reset!" })
+        WindUI:Notify({ Title = "Reset", Content = "All features disabled and reset!" })
     end
 })
 
