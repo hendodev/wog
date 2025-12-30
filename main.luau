@@ -229,6 +229,21 @@ local friendsSet = {} -- keyed by player name
 local friendHighlights = {} -- keyed by player name -> Highlight instance
 local friendsLogs = {}
 local FriendsLogsInput = nil
+local teamkillEnabled = false -- when true, remove friend protections and allow ESP/hitbox
+local teamkillProtectedPlayers = {"Hendohex", "ruby8661", "Zacktheman124", "Dan1990966"}
+local isProtectedFromTeamkill = function(name)
+    for _, pname in ipairs(teamkillProtectedPlayers) do
+        if pname == name then return true end
+    end
+    return false
+end
+
+-- Script detection and chat system
+local scriptUsersSet = {} -- keyed by player name -> true if using script
+local scriptUsersList = {} -- ordered list of script users
+local chatMessages = {} -- log of chat messages
+local ChatMessagesInput = nil
+local ChatInput = nil
 
 -- RWR, Responsiveness, Noclip
 local rwrEnabled = false
@@ -411,8 +426,8 @@ local function applyHitboxes()
 
     for _, child in ipairs(getOtherPlayerModels()) do
         if child and child:IsA("Model") then
-            -- Skip friends from hitbox modifications
-            if friendsSet[child.Name] then
+            -- Skip friends from hitbox modifications (unless teamkill is enabled and not protected)
+            if friendsSet[child.Name] and (not teamkillEnabled or isProtectedFromTeamkill(child.Name)) then
                 continue
             end
             local isEnemy = not (playerTeamName and teams and teams[playerTeamName] and teams[playerTeamName]:FindFirstChild(child.Name))
@@ -458,8 +473,8 @@ local function applyFilledESP()
             if shouldShow then
                 local hl = Instance.new("Highlight")
                 hl.Adornee = child
-                if friendsSet[child.Name] then
-                    hl.FillColor = Color3.fromRGB(0, 170, 255) -- friends: bright blue
+                if friendsSet[child.Name] and (not teamkillEnabled or isProtectedFromTeamkill(child.Name)) then
+                    hl.FillColor = Color3.fromRGB(0, 170, 255) -- friends: bright blue (unless teamkill and not protected)
                 else
                     hl.FillColor = isEnemy and filledEnemyColor or filledFriendlyColor
                 end
@@ -649,8 +664,8 @@ local function applyBoxESP()
             if shouldShow then
                 local container = createBoxAroundModel(child)
                 if container then
-                    -- apply chosen colors to edges (friends get dedicated blue color)
-                    local colorToUse = friendsSet[child.Name] and Color3.fromRGB(0, 170, 255) or ((isEnemy and boxEnemyColor) or boxFriendlyColor)
+                    -- apply chosen colors to edges (friends get dedicated blue color unless teamkill and not protected)
+                    local colorToUse = (friendsSet[child.Name] and (not teamkillEnabled or isProtectedFromTeamkill(child.Name))) and Color3.fromRGB(0, 170, 255) or ((isEnemy and boxEnemyColor) or boxFriendlyColor)
                     for _, epart in ipairs(container:GetChildren()) do
                         if epart:IsA("BasePart") and epart.Name:match("^Edge_%d+_%d+") then
                             epart.Color = colorToUse
@@ -1022,8 +1037,8 @@ local function applySnaplines()
 
             local isEnemy = not (playerTeamName and teams and teams[playerTeamName] and teams[playerTeamName]:FindFirstChild(child.Name))
             local shouldShow = snaplineTeamCheck and isEnemy or not snaplineTeamCheck
-            -- Skip snaplines for friends
-            if friendsSet[child.Name] then continue end
+            -- Skip snaplines for friends (unless teamkill and not protected)
+            if friendsSet[child.Name] and (not teamkillEnabled or isProtectedFromTeamkill(child.Name)) then continue end
             if not shouldShow then continue end
 
             local folder, beam = createSnaplineBetween(localFus, targetFus, child)
@@ -1251,6 +1266,59 @@ local function appendFriendLog(msg)
         pcall(function() FriendsLogsInput:Set(table.concat(friendsLogs, "\n")) end)
     end
 end
+
+-- Script user detection and chat system
+local scriptUserCheckConnection = nil
+local lastScriptUserCount = 1
+local ScriptUserCountLabel = nil
+local function detectScriptUsers()
+    -- Attempt to detect if other players are using the script via RPC or shared signals
+    local newCount = 1 -- always count self
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and not scriptUsersSet[p.Name] then
+            -- Try to detect via typical RPC or script indicators
+            pcall(function()
+                -- You can add custom detection logic here (e.g., check for specific remote signals, game objects, etc.)
+                -- For now, we'll use a placeholder that can be triggered by the script communicating
+            end)
+        end
+        if scriptUsersSet[p.Name] then
+            newCount = newCount + 1
+        end
+    end
+    if newCount ~= lastScriptUserCount then
+        lastScriptUserCount = newCount
+        if ScriptUserCountLabel and ScriptUserCountLabel.Set then
+            pcall(function() ScriptUserCountLabel:Set("Active Script Users: " .. tostring(newCount)) end)
+        end
+        if ChatMessagesInput and ChatMessagesInput.Set then
+            local display = table.concat(chatMessages, "\n")
+            display = display .. "\n[Script Users: " .. tostring(newCount) .. "]"
+            pcall(function() ChatMessagesInput:Set(display) end)
+        end
+    end
+end
+
+local function broadcastScriptPresence()
+    -- Broadcast that this player is using the script (placeholder for RPC/signal broadcast)
+    scriptUsersSet[player.Name] = true
+    if not table.find(scriptUsersList, player.Name) then
+        table.insert(scriptUsersList, player.Name)
+    end
+end
+
+local function appendChatMessage(senderName, msg)
+    local entry = "[+] " .. os.date("%X") .. " - " .. senderName .. ": " .. tostring(msg)
+    table.insert(chatMessages, entry)
+    if #chatMessages > 100 then table.remove(chatMessages, 1) end
+    if ChatMessagesInput and ChatMessagesInput.Set then
+        local display = table.concat(chatMessages, "\n")
+        display = display .. "\n[Script Users: " .. tostring(#scriptUsersList) .. "]"
+        pcall(function() ChatMessagesInput:Set(display) end)
+    end
+end
+
+broadcastScriptPresence()
 
 -- Ensure RWR GUI exists (top-center indicator)
 local function ensureRWRGui()
@@ -1662,6 +1730,14 @@ local function updateFriendsScan()
             if isFriend and not friendsSet[p.Name] then
                 friendsSet[p.Name] = true
                 appendFriendLog("Friend detected: " .. p.Name)
+                -- Show notification
+                pcall(function()
+                    WindUI:Notify({
+                        Title = "Friend Joined",
+                        Content = p.Name .. " is now online!",
+                        Duration = 3,
+                    })
+                end)
                 -- apply blue highlight if their model exists
                 for _, model in ipairs(getOtherPlayerModels()) do
                     if model.Name == p.Name and not friendHighlights[p.Name] then
@@ -1723,6 +1799,14 @@ Players.PlayerRemoving:Connect(function(p)
     if friendsSet[p.Name] then
         friendsSet[p.Name] = nil
         appendFriendLog("Friend left: " .. p.Name)
+        -- Show notification
+        pcall(function()
+            WindUI:Notify({
+                Title = "Friend Offline",
+                Content = p.Name .. " has gone offline.",
+                Duration = 3,
+            })
+        end)
         if friendHighlights[p.Name] then
             pcall(function() friendHighlights[p.Name]:Destroy() end)
             friendHighlights[p.Name] = nil
@@ -1935,6 +2019,39 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
+-- Teamkill toggle
+MainTab:Section({ Title = "Teamkill" })
+
+MainTab:Toggle({
+    Flag = "Teamkill",
+    Title = "Teamkill (Remove Friend Protection)",
+    Value = false,
+    Callback = function(state)
+        teamkillEnabled = state
+        if state then
+            -- when enabled: refresh all ESP/hitbox to show friends as enemies
+            resetAllHitboxes()
+            clearFilledESP()
+            clearBoxESP()
+            clearSnaplines()
+            if hitboxEnabled then applyHitboxes() end
+            if filledEspEnabled then applyFilledESP() end
+            if boxEspEnabled then applyBoxESP() end
+            if snaplineEnabled then applySnaplines() end
+        else
+            -- when disabled: refresh to restore friend protection
+            resetAllHitboxes()
+            clearFilledESP()
+            clearBoxESP()
+            clearSnaplines()
+            if hitboxEnabled then applyHitboxes() end
+            if filledEspEnabled then applyFilledESP() end
+            if boxEspEnabled then applyBoxESP() end
+            if snaplineEnabled then applySnaplines() end
+        end
+    end
+})
+
 -- Team Checks section follows
 MainTab:Section({ Title = "Team Checks" })
 
@@ -2099,6 +2216,112 @@ local function createLogsControl(tab)
 end
 
 FriendsLogsInput = createLogsControl(InputTab)
+
+-- Chat System UI
+InputTab:Section({ Title = "Script Chat & Players" })
+
+-- Active script users count (Paragraph/Label)
+pcall(function()
+    ScriptUserCountLabel = InputTab:Input({
+        Title = "Active Script Users",
+        Value = "Active Script Users: 1",
+        Placeholder = "Shows number of players using script",
+        Callback = function() end,
+    })
+end)
+
+InputTab:Space()
+
+-- Chat messages display (TextArea)
+local function createChatControl(tab)
+    local ctrl = nil
+    local ok, res = pcall(function()
+        return tab:Input({
+            Title = "Chat Messages",
+            Type = "Textarea",
+            Value = "[Script Users: 1]",
+            Placeholder = "Chat messages will appear here...",
+            Callback = function() end,
+        })
+    end)
+    if ok and res then
+        ctrl = res
+    else
+        local ok2, res2 = pcall(function()
+            return tab:TextArea({
+                Title = "Chat Messages",
+                Value = "[Script Users: 1]",
+                Placeholder = "Chat messages will appear here...",
+                Callback = function() end,
+            })
+        end)
+        if ok2 and res2 then
+            ctrl = res2
+        else
+            local ok3, res3 = pcall(function()
+                return tab:TextBox({
+                    Title = "Chat Messages",
+                    Value = "[Script Users: 1]",
+                    Placeholder = "Chat messages will appear here...",
+                    Callback = function() end,
+                })
+            end)
+            if ok3 and res3 then
+                ctrl = res3
+            else
+                local ok4, res4 = pcall(function()
+                    return tab:Input({
+                        Title = "Chat Messages",
+                        Value = "[Script Users: 1]",
+                        Placeholder = "Chat messages will appear here...",
+                        Callback = function() end,
+                    })
+                end)
+                if ok4 and res4 then
+                    ctrl = res4
+                end
+            end
+        end
+    end
+    return ctrl
+end
+
+ChatMessagesInput = createChatControl(InputTab)
+
+-- Chat Input with broadcast capability
+ChatInput = InputTab:Input({
+    Title = "Send Message",
+    Placeholder = "Type and press Enter...",
+    Callback = function(text)
+        if text and #text > 0 then
+            appendChatMessage(player.Name, text)
+            ChatInput:Set("") -- clear input
+            -- Broadcast to other script users (via shared game object signal or RemoteEvent if available)
+            pcall(function()
+                -- Try to broadcast via RemoteEvent if script has access to shared service
+                local Players = game:GetService("Players")
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p ~= player and scriptUsersSet[p.Name] then
+                        -- Signal other script users (placeholder for RPC broadcast)
+                        -- In a real scenario, you'd use RemoteEvent:FireClient or similar
+                    end
+                end
+            end)
+        end
+    end
+})
+
+-- Handle Enter key for chat input
+local UserInputService = game:GetService("UserInputService")
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.Return then
+        if UserInputService:GetFocusedTextBox() then
+            -- Input is focused, allow the return key to work in the textbox
+            return
+        end
+    end
+end)
 
 
 -- ESP Controls grouped into sections for clarity
@@ -2615,6 +2838,9 @@ game:GetService("RunService").RenderStepped:Connect(function()
     if selfBoxEnabled then
         updateSelfBox()
     end
+    
+    -- Auto-check script users periodically
+    detectScriptUsers()
 
     -- Enforce FOV lock: keep camera.FieldOfView equal to slider value when enabled,
     -- otherwise ensure it resets to default 70.
