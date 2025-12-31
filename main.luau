@@ -2527,7 +2527,7 @@ HitboxTab:Toggle({
 HitboxTab:Slider({
     Flag = "FuselageMultiplier",
     Title = "Fuselage Multiplier (%)",
-    Value = { Min = 50, Max = 1000, Default = 100 },
+    Value = { Min = 50, Max = 6000, Default = 100 },
     Step = 5,
     Callback = function(val)
         fuselageMultiplier = val
@@ -2729,7 +2729,7 @@ ESPTab:Toggle({
 HitboxTab:Slider({
     Flag = "WingsMultiplier",
     Title = "Wings Multiplier (%)",
-    Value = { Min = 50, Max = 1000, Default = 100 },
+    Value = { Min = 50, Max = 6000, Default = 100 },
     Step = 5,
     Callback = function(val)
         wingsMultiplier = val
@@ -2877,3 +2877,4 @@ game:GetService("RunService").RenderStepped:Connect(function()
         pcall(updatePredictionESP)
     end
 end)
+
