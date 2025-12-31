@@ -19,7 +19,7 @@ end
 
 -- Create Window
 local Window = WindUI:CreateWindow({
-    Title = "Leon's WOG - Call +4407957179190 or +4401484541111 ",
+    Title = "Wings Of Zeb - Made By [ci9h|64bitwings|V:2.9.2] ",
     Folder = "GameGUI",
     OpenButton = {
         Enabled = true,
@@ -168,6 +168,7 @@ ConfigSection:Button({
 -- Variables
 local fuselageMultiplier = 100
 local wingsMultiplier = 100
+local hitboxTransparency = 0 -- 0 = visible, 1 = invisible
 
 local hitboxEnabled = false
 local hitboxTeamCheck = true
@@ -438,18 +439,21 @@ local function applyHitboxes()
             if fuselage then
                 storeOriginalIfNeeded(fuselage)
                 fuselage.Size = originalSizes[fuselage] * (fuselageMultiplier / 100)
+                pcall(function() fuselage.Transparency = hitboxTransparency end)
             end
 
             local leftWing = child:FindFirstChild("LeftWing", true)
             if leftWing then
                 storeOriginalIfNeeded(leftWing)
                 leftWing.Size = originalSizes[leftWing] * (wingsMultiplier / 100)
+                pcall(function() leftWing.Transparency = hitboxTransparency end)
             end
 
             local rightWing = child:FindFirstChild("RightWing", true)
             if rightWing then
                 storeOriginalIfNeeded(rightWing)
                 rightWing.Size = originalSizes[rightWing] * (wingsMultiplier / 100)
+                pcall(function() rightWing.Transparency = hitboxTransparency end)
             end
         end
     end
@@ -2533,6 +2537,19 @@ HitboxTab:Slider({
     end
 })
 
+HitboxTab:Slider({
+    Flag = "HitboxTransparency",
+    Title = "Hitbox Transparency",
+    Value = { Min = 0, Max = 1, Default = 0 },
+    Step = 0.05,
+    Callback = function(val)
+        hitboxTransparency = val
+        if hitboxEnabled then
+            applyHitboxes()
+        end
+    end
+})
+
 -- ESP Colors & Rainbow
 ESPTab:Section({ Title = "ESP Colors" })
 
@@ -2849,7 +2866,7 @@ game:GetService("RunService").RenderStepped:Connect(function()
             if camera.FieldOfView ~= fovValue then
                 pcall(function() camera.FieldOfView = fovValue end)
             end 
-            end
+        end
     end
     -- RWR update
     if rwrEnabled then
