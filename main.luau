@@ -19,7 +19,7 @@ end
 
 -- Create Window
 local Window = WindUI:CreateWindow({
-    Title = "Wings Of Zeb - Made By [ci9h|64bitwings|V:2.9.2] ",
+    Title = "Wings Of Zeb - Made By [ci9h|64bitwings|V:2.9.3] ",
     Folder = "GameGUI",
     OpenButton = {
         Enabled = true,
@@ -2877,4 +2877,5 @@ game:GetService("RunService").RenderStepped:Connect(function()
         pcall(updatePredictionESP)
     end
 end)
+
 
