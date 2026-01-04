@@ -1,10 +1,6 @@
--- Load WindUI
 local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
-
 local player = game.Players.LocalPlayer
 local TeleportService = game:GetService("TeleportService")
-
--- Function to find object recursively
 local function findObjectByName(parent, name)
     if not parent then return nil end
     for _, child in ipairs(parent:GetChildren()) do
@@ -17,7 +13,6 @@ local function findObjectByName(parent, name)
     return nil
 end
 
--- Create Window
 local Window = WindUI:CreateWindow({
     Title = "Wings Of Zeb - Made By [ci9h|64bitwings|V:2.9.3] ",
     Folder = "GameGUI",
@@ -28,14 +23,11 @@ local Window = WindUI:CreateWindow({
     },
 })
 
--- Tabs
 local MainTab = Window:Tab({ Title = "Main" })
 local ESPTab = Window:Tab({ Title = "ESP" })
 local HitboxTab = Window:Tab({ Title = "Hitbox" })
 
--- Visible top-level Config tab (placed after Hitbox)
 local ConfigTab = Window:Tab({ Title = "Config", Icon = "solar:folder-with-files-bold" })
--- Input tab for logs and inputs
 local InputTab = Window:Tab({ Title = "Input" })
 
 local ConfigManager = nil
@@ -117,7 +109,6 @@ ConfigSection:Button({
             local ok2 = pcall(function() cfg:Load() end)
             if ok2 then
                 WindUI:Notify({ Title = "Config", Content = "Loaded: " .. tostring(ConfigName) })
-                -- try to reapply a few known flags
                 pcall(function()
                     hitboxEnabled = cfg:Get("HitboxEnabled") or hitboxEnabled
                     fuselageMultiplier = cfg:Get("FuselageMultiplier") or fuselageMultiplier
@@ -135,7 +126,6 @@ ConfigSection:Button({
                     snaplineFriendlyColor = cfg:Get("SnaplineFriendlyColor") or snaplineFriendlyColor
                     snaplineThickness = cfg:Get("SnaplineThickness") or snaplineThickness
                 end)
-                -- reapply visuals
                 resetAllHitboxes(); clearFilledESP(); clearBoxESP(); clearLobbyESP(); clearSelfBox(); clearSelfOutline()
                 if hitboxEnabled then applyHitboxes() end
                 if filledEspEnabled then applyFilledESP() end
@@ -164,54 +154,34 @@ ConfigSection:Button({
     end
 })
 
-
--- Variables
 local fuselageMultiplier = 100
 local wingsMultiplier = 100
-local hitboxTransparency = 0 -- 0 = visible, 1 = invisible
-
+local hitboxTransparency = 0
 local hitboxEnabled = false
 local hitboxTeamCheck = true
-
 local filledEspEnabled = false
 local boxEspEnabled = false
 local lobbyEspEnabled = false
-
 local filledHighlights = {}
 local boxBeamContainers = {}
-
 local originalSizes = {}
-
--- ESP Team Check variables
 local filledEspTeamCheck = true
 local boxEspTeamCheck = true
-
--- Lobby ESP variables
 local previewPlaneHighlight = nil
 local previewPlaneBoxFolder = nil
-
--- Camera FOV control
 local fovEnabled = false
 local fovValue = 70
-
--- Snapline (tracer) variables
 local snaplineEnabled = false
 local snaplineTeamCheck = true
 local snaplineContainers = {}
 local snaplineThickness = 0.03
-
--- Self ESP variables
 local selfBoxEnabled = false
 local selfBoxModel = nil
 local selfBoxFolder = nil
 local selfOutlineEnabled = false
 local selfOutlineHighlight = nil
-
--- Debugging helpers
 local debugESP = false
 local loggedBoxCreation = {}
-
--- ESP color settings (user configurable via UI flags)
 local filledEnemyColor = Color3.fromRGB(255, 0, 0)
 local filledFriendlyColor = Color3.fromRGB(0, 0, 255)
 local boxEnemyColor = Color3.fromRGB(255, 0, 0)
@@ -220,18 +190,15 @@ local snaplineEnemyColor = Color3.fromRGB(255, 0, 0)
 local snaplineFriendlyColor = Color3.fromRGB(0, 0, 255)
 local lobbyBoxColor = Color3.fromRGB(255, 255, 255)
 local selfBoxColor = Color3.fromRGB(255, 255, 255)
-
 local rainbowAllEnabled = false
 local rainbowTask = nil
 local savedUserColors = {}
-
--- Friends tracking & logs
-local friendsSet = {} -- keyed by player name
-local friendHighlights = {} -- keyed by player name -> Highlight instance
+local friendsSet = {} 
+local friendHighlights = {} 
 local friendsLogs = {}
 local FriendsLogsInput = nil
-local teamkillEnabled = false -- when true, remove friend protections and allow ESP/hitbox
-local teamkillProtectedPlayers = {"Hendohex", "ruby8661", "Zacktheman124", "Dan1990966"}
+local teamkillEnabled = false 
+local teamkillProtectedPlayers = {"Hendohex", "ruby8661", "Zacktheman124", "Dan1990966"} --all my alts btw
 local isProtectedFromTeamkill = function(name)
     for _, pname in ipairs(teamkillProtectedPlayers) do
         if pname == name then return true end
@@ -239,52 +206,40 @@ local isProtectedFromTeamkill = function(name)
     return false
 end
 
--- Script detection and chat system
-local scriptUsersSet = {} -- keyed by player name -> true if using script
-local scriptUsersList = {} -- ordered list of script users
-local chatMessages = {} -- log of chat messages
+local scriptUsersSet = {}
+local scriptUsersList = {}
+local chatMessages = {}
 local ChatMessagesInput = nil
 local ChatInput = nil
-
--- RWR, Responsiveness, Noclip
 local rwrEnabled = false
 local rwrGui = nil
-
 local maxRespEnabled = false
 local originalResponsiveness = nil
 local maxRespKeepConn = nil
-
 local noclipEnabled = false
 local noclipKey = "N"
-local noclipOriginals = {} -- part -> {CanCollide, CanTouch, CanQuery}
+local noclipOriginals = {} 
 local noclipToggleControl = nil
 local noclipKeybindControl = nil
-
--- TriangleTerrain no-collide
 local terrainNoCollideEnabled = false
-local terrainOriginals = {} -- part -> {CanCollide, CanTouch, CanQuery}
+local terrainOriginals = {} 
 local terrainEnforceConn = nil
-
--- Prediction ESP (2D circle) variables
 local predictionEnabled = false
 local predictionLeadTime = 0.2
 local predictionCircleSize = 48
 local predictionGui = nil
-local predictionCircles = {} -- model -> Frame
-local predictionProjectileSpeed = nil -- optional, unused for now
-local prevSeatData = {} -- model -> {pos = Vector3, t = number}
+local predictionCircles = {}
+local predictionProjectileSpeed = nil 
+local prevSeatData = {} 
 
--- Cobra Spin state
 local cobraSpinEnabled = false
 local CobraToggleControl = nil
 
 
 
--- Player folder & Camera
 local camera = workspace.CurrentCamera or workspace:FindFirstChild("Camera")
 local playerFolder = camera and camera:FindFirstChild("plane_viewmodels")
 
--- Helper: gather models from both `plane_viewmodels` and camera's `plane_model` (dedupe)
 local function getAllPlayerModels()
     local result = {}
     local seen = {}
@@ -313,8 +268,7 @@ local function getAllPlayerModels()
     return result
 end
 
--- Helper: return only other players' models (from camera's `plane_viewmodels`).
--- This excludes the local player's `plane_model` so self-only features remain separate.
+
 local function getOtherPlayerModels()
     local result = {}
     if playerFolder then
@@ -327,7 +281,7 @@ local function getOtherPlayerModels()
     return result
 end
 
--- Teams
+--Teams
 local teams = nil
 local playerTeamName = nil
 pcall(function()
@@ -346,11 +300,9 @@ local function checkPlayerTeam()
 end
 checkPlayerTeam()
 
--- Function to get model oriented bounding box
 local function getModelOrientedBounds(model)
     if not model then return nil, nil, nil end
 
-    -- Choose a reference part: prefer PrimaryPart, otherwise pick the largest BasePart by volume
     local referencePart = model.PrimaryPart
     if not referencePart then
         local bestPart = nil
@@ -376,7 +328,6 @@ local function getModelOrientedBounds(model)
     local minX, minY, minZ = math.huge, math.huge, math.huge
     local maxX, maxY, maxZ = -math.huge, -math.huge, -math.huge
 
-    -- Calculate bounding box in reference part's local space
     for _, part in ipairs(model:GetDescendants()) do
         if part:IsA("BasePart") then
             local localCF = referencePart.CFrame:Inverse() * part.CFrame
@@ -406,14 +357,12 @@ local function getModelOrientedBounds(model)
     return referencePart.CFrame, localCenter, localSize
 end
 
--- Store original size if not already stored
 local function storeOriginalIfNeeded(part)
     if part and part:IsA("BasePart") and not originalSizes[part] then
         originalSizes[part] = part.Size
     end
 end
 
--- HITBOX FUNCTIONS
 local function resetAllHitboxes()
     for part, orig in pairs(originalSizes) do
         if part and part.Parent then
@@ -427,7 +376,6 @@ local function applyHitboxes()
 
     for _, child in ipairs(getOtherPlayerModels()) do
         if child and child:IsA("Model") then
-            -- Skip friends from hitbox modifications (unless teamkill is enabled and not protected)
             if friendsSet[child.Name] and (not teamkillEnabled or isProtectedFromTeamkill(child.Name)) then
                 continue
             end
@@ -459,7 +407,6 @@ local function applyHitboxes()
     end
 end
 
--- FILLED ESP FUNCTIONS
 local function clearFilledESP()
     for _, hl in ipairs(filledHighlights) do
         if hl then hl:Destroy() end
@@ -478,7 +425,7 @@ local function applyFilledESP()
                 local hl = Instance.new("Highlight")
                 hl.Adornee = child
                 if friendsSet[child.Name] and (not teamkillEnabled or isProtectedFromTeamkill(child.Name)) then
-                    hl.FillColor = Color3.fromRGB(0, 170, 255) -- friends: bright blue (unless teamkill and not protected)
+                    hl.FillColor = Color3.fromRGB(0, 170, 255) -- dumbahh friends on blue tyishi else opp😹🔪🩸
                 else
                     hl.FillColor = isEnemy and filledEnemyColor or filledFriendlyColor
                 end
@@ -496,7 +443,6 @@ local function applyFilledESP()
     end
 end
 
--- BOX ESP FUNCTIONS
 local function createBoxAroundModel(model)
     if not model then
         warn("Box ESP: Model is nil")
@@ -512,11 +458,9 @@ local function createBoxAroundModel(model)
         {1,5}, {2,6}, {3,7}, {4,8},
     }
 
-    -- Determine team status for coloring
     local isEnemy = not (playerTeamName and teams and teams[playerTeamName] and teams[playerTeamName]:FindFirstChild(model.Name))
     local edgeColor = isEnemy and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 0, 255)
 
-    -- Create 8 invisible corner parts with attachments so beams anchor to real Parts
     local cornerParts = {}
     for i = 1, 8 do
         local p = Instance.new("Part")
@@ -535,7 +479,6 @@ local function createBoxAroundModel(model)
         cornerParts[i] = p
     end
 
-    -- Create solid Neon connector parts for each edge for reliable visibility
     local edgeParts = {}
     for _, edge in ipairs(edges) do
         local epart = Instance.new("Part")
@@ -544,16 +487,14 @@ local function createBoxAroundModel(model)
         epart.CanCollide = false
         epart.Transparency = 0
         epart.Material = Enum.Material.Neon
-        epart.Size = Vector3.new(0.03, 0.03, 0.03) -- slimmer lines
+        epart.Size = Vector3.new(0.03, 0.03, 0.03) 
         epart.Parent = folder
 
-        -- store edge endpoints as attributes
         epart:SetAttribute("Edge1", edge[1])
         epart:SetAttribute("Edge2", edge[2])
 
         epart:SetAttribute("IsVertical", (edge[1] == 1 and edge[2] == 5) or (edge[1] == 2 and edge[2] == 6) or (edge[1] == 3 and edge[2] == 7) or (edge[1] == 4 and edge[2] == 8))
 
-        -- color
         epart.Color = edgeColor
 
         edgeParts[#edgeParts + 1] = epart
@@ -571,7 +512,6 @@ end
 local function updateBoxPositions()
     for model, folder in pairs(boxBeamContainers) do
         if model and model.Parent and folder and folder.Parent then
-            -- Get oriented bounds (follows plane rotation)
             local modelCF, localCenter, localSize = getModelOrientedBounds(model)
             
             if not modelCF then
@@ -585,10 +525,8 @@ local function updateBoxPositions()
                 continue
             end
             
-            -- Add spacing
             localSize = localSize * 1.2
             
-            -- Create corners in local space
             local localCorners = {
                 CFrame.new(localCenter + Vector3.new(-localSize.X/2, -localSize.Y/2, -localSize.Z/2)),
                 CFrame.new(localCenter + Vector3.new( localSize.X/2, -localSize.Y/2, -localSize.Z/2)),
@@ -600,19 +538,16 @@ local function updateBoxPositions()
                 CFrame.new(localCenter + Vector3.new(-localSize.X/2,  localSize.Y/2,  localSize.Z/2)),
             }
             
-            -- Transform to world space and move corner parts
             local worldCorners = {}
             for i, localCF in ipairs(localCorners) do
                 worldCorners[i] = modelCF * localCF
             end
 
-            -- Move corner Parts if present under folder
             for i = 1, 8 do
                 local cornerPart = folder:FindFirstChild("Corner" .. i)
                 if cornerPart and cornerPart:IsA("BasePart") then
                     cornerPart.CFrame = worldCorners[i]
                 else
-                    -- Fallback: move attachment directly if no corner part
                     for _, att in ipairs(folder:GetChildren()) do
                         if att:IsA("Attachment") and att.Name == ("Att" .. i) then
                             att.WorldCFrame = worldCorners[i]
@@ -621,7 +556,6 @@ local function updateBoxPositions()
                 end
             end
 
-            -- Update edge parts positions/sizes
             for _, epart in ipairs(folder:GetChildren()) do
                 if epart:IsA("BasePart") and epart.Name:match("^Edge_%d+_%d+") then
                     local e1 = epart:GetAttribute("Edge1")
@@ -634,9 +568,7 @@ local function updateBoxPositions()
                         local dir = p2 - p1
                         local len = dir.Magnitude
                         if len > 0 then
-                            -- thickness: slimmer lines
                             local thickness = isVertical and 0.06 or 0.03
-                            -- Use Z axis for length so CFrame.new(mid, p2) aligns correctly
                             epart.Size = Vector3.new(thickness, thickness, len)
                             epart.CFrame = CFrame.new(mid, p2)
                         end
@@ -644,7 +576,6 @@ local function updateBoxPositions()
                 end
             end
         else
-            -- Clean up invalid entries
             if folder then folder:Destroy() end
             boxBeamContainers[model] = nil
         end
@@ -668,7 +599,6 @@ local function applyBoxESP()
             if shouldShow then
                 local container = createBoxAroundModel(child)
                 if container then
-                    -- apply chosen colors to edges (friends get dedicated blue color unless teamkill and not protected)
                     local colorToUse = (friendsSet[child.Name] and (not teamkillEnabled or isProtectedFromTeamkill(child.Name))) and Color3.fromRGB(0, 170, 255) or ((isEnemy and boxEnemyColor) or boxFriendlyColor)
                     for _, epart in ipairs(container:GetChildren()) do
                         if epart:IsA("BasePart") and epart.Name:match("^Edge_%d+_%d+") then
@@ -688,18 +618,14 @@ local function applyBoxESP()
     end
 end
 
--- LOBBY ESP FUNCTIONS
 local function getModelBounds(model)
-    -- Get the actual bounding box of all parts in the model
     local minX, minY, minZ = math.huge, math.huge, math.huge
     local maxX, maxY, maxZ = -math.huge, -math.huge, -math.huge
     
     for _, part in ipairs(model:GetDescendants()) do
         if part:IsA("BasePart") then
             local cf = part.CFrame
-            local size = part.Size
-            
-            -- Get all 8 corners of this part
+            local size = part.Size        
             local corners = {
                 cf * CFrame.new(-size.X/2, -size.Y/2, -size.Z/2),
                 cf * CFrame.new( size.X/2, -size.Y/2, -size.Z/2),
@@ -745,7 +671,6 @@ local function createGlowingBoxAroundModel(model)
         {1,5}, {2,6}, {3,7}, {4,8},
     }
 
-    -- Create 8 invisible corner parts with attachments for lobby box too
     local cornerParts = {}
     for i = 1, 8 do
         local p = Instance.new("Part")
@@ -763,7 +688,6 @@ local function createGlowingBoxAroundModel(model)
 
         cornerParts[i] = p
     end
-    -- Create Neon edge parts for lobby box
     for _, edge in ipairs(edges) do
         local epart = Instance.new("Part")
         epart.Name = "Edge_" .. edge[1] .. "_" .. edge[2]
@@ -771,7 +695,7 @@ local function createGlowingBoxAroundModel(model)
         epart.CanCollide = false
         epart.Transparency = 0
         epart.Material = Enum.Material.Neon
-        epart.Size = Vector3.new(0.03, 0.03, 0.03) -- slimmer lobby lines
+        epart.Size = Vector3.new(0.03, 0.03, 0.03) 
         epart.Parent = folder
 
         epart:SetAttribute("Edge1", edge[1])
@@ -800,7 +724,6 @@ local function updateLobbyBoxPositions()
     
     if not planeModel then return end
     
-    -- Get oriented bounds (follows plane rotation)
     local modelCF, localCenter, localSize = getModelOrientedBounds(planeModel)
     
     if not modelCF then 
@@ -808,10 +731,8 @@ local function updateLobbyBoxPositions()
         return 
     end
     
-    -- Add spacing
-    localSize = localSize * 1.3  -- Slightly bigger for visibility
+    localSize = localSize * 1.3  
     
-    -- Create corners in local space, then transform to world space
     local localCorners = {
         CFrame.new(localCenter + Vector3.new(-localSize.X/2, -localSize.Y/2, -localSize.Z/2)),
         CFrame.new(localCenter + Vector3.new( localSize.X/2, -localSize.Y/2, -localSize.Z/2)),
@@ -823,13 +744,11 @@ local function updateLobbyBoxPositions()
         CFrame.new(localCenter + Vector3.new(-localSize.X/2,  localSize.Y/2,  localSize.Z/2)),
     }
     
-    -- Transform to world space
     local worldCorners = {}
     for i, localCF in ipairs(localCorners) do
         worldCorners[i] = modelCF * localCF
     end
 
-    -- Move corner parts if present under previewPlaneBoxFolder
     for i = 1, 8 do
         local cornerPart = previewPlaneBoxFolder:FindFirstChild("Corner" .. i)
         if cornerPart and cornerPart:IsA("BasePart") then
@@ -843,7 +762,6 @@ local function updateLobbyBoxPositions()
         end
     end
 
-    -- Update Neon edge parts positions/sizes for lobby
     for _, epart in ipairs(previewPlaneBoxFolder:GetChildren()) do
         if epart:IsA("BasePart") and epart.Name:match("^Edge_%d+_%d+") then
             local e1 = epart:GetAttribute("Edge1")
@@ -861,7 +779,6 @@ local function updateLobbyBoxPositions()
             end
         end
     end
-    -- Ensure lobby edge parts remain white neon (no rainbow animation)
     for _, epart in ipairs(previewPlaneBoxFolder:GetChildren()) do
         if epart:IsA("BasePart") and epart.Name:match("^Edge_%d+_%d+") then
             epart.Color = Color3.fromRGB(255, 255, 255)
@@ -899,7 +816,6 @@ local function applyLobbyESP()
     
     previewPlaneHighlight = Instance.new("Highlight")
     previewPlaneHighlight.Adornee = planeModel
-    -- Outline-only highlight: no fill, white outline
     previewPlaneHighlight.FillTransparency = 1
     previewPlaneHighlight.OutlineColor = Color3.fromRGB(255, 255, 255)
     previewPlaneHighlight.OutlineTransparency = 0
@@ -909,13 +825,11 @@ local function applyLobbyESP()
     previewPlaneBoxFolder = createGlowingBoxAroundModel(planeModel)
 end
 
--- SNAPLINE (TRACERS) FUNCTIONS
 local function getLocalFuselage()
     local cam = workspace.CurrentCamera or workspace:FindFirstChild("Camera")
     if not cam then return nil, nil end
     local pm = cam:FindFirstChild("plane_model")
 
-    -- Prefer any model inside plane_model that contains a Fuselage
     if pm then
         for _, candidate in ipairs(pm:GetChildren()) do
             if candidate and candidate:IsA("Model") then
@@ -927,7 +841,6 @@ local function getLocalFuselage()
         end
     end
 
-    -- Fallback: look in playerFolder for player's model with a Fuselage
     if playerFolder then
         for _, candidate in ipairs(playerFolder:GetChildren()) do
             if candidate and candidate:IsA("Model") and candidate.Name == player.Name then
@@ -937,7 +850,6 @@ local function getLocalFuselage()
                 end
             end
         end
-        -- Final fallback: any model under playerFolder that has a Fuselage
         for _, candidate in ipairs(playerFolder:GetChildren()) do
             if candidate and candidate:IsA("Model") then
                 local fus2 = candidate:FindFirstChild("Fuselage", true)
@@ -954,7 +866,6 @@ end
 local function clearSnaplines()
     for model, folder in pairs(snaplineContainers) do
         if folder then
-            -- destroy attachments referenced inside folder (ObjectValues)
             for _, v in ipairs(folder:GetChildren()) do
                 if v:IsA("ObjectValue") and v.Value and v.Value:IsA("Attachment") then
                     pcall(function() v.Value:Destroy() end)
@@ -965,7 +876,6 @@ local function clearSnaplines()
         snaplineContainers[model] = nil
     end
     snaplineContainers = {}
-    -- Extra cleanup: ensure no lingering Snap_Beam, Snap_Att* attachments or folders
     for _, inst in ipairs(workspace:GetDescendants()) do
         if inst:IsA("Beam") and inst.Name == "Snap_Beam" then
             pcall(function() inst:Destroy() end)
@@ -984,7 +894,6 @@ local function createSnaplineBetween(localFus, targetFus, targetModel)
     folder.Name = "Snapline_" .. tostring(targetModel.Name)
     folder.Parent = workspace
 
-    -- Create attachments parented to each fuselage part (unique names)
     local att0 = Instance.new("Attachment")
     att0.Name = "Snap_Att0_" .. tostring(targetModel.Name)
     att0.Parent = localFus
@@ -995,7 +904,6 @@ local function createSnaplineBetween(localFus, targetFus, targetModel)
     att1.Parent = targetFus
     att1.Position = Vector3.new(0, -targetFus.Size.Y/2, 0)
 
-    -- Keep references so we can clean them up later
     local ref0 = Instance.new("ObjectValue")
     ref0.Name = "Ref_Att0"
     ref0.Value = att0
@@ -1006,7 +914,6 @@ local function createSnaplineBetween(localFus, targetFus, targetModel)
     ref1.Value = att1
     ref1.Parent = folder
 
-    -- Create beam
     local beam = Instance.new("Beam")
     beam.Name = "Snap_Beam"
     beam.Attachment0 = att0
@@ -1041,7 +948,6 @@ local function applySnaplines()
 
             local isEnemy = not (playerTeamName and teams and teams[playerTeamName] and teams[playerTeamName]:FindFirstChild(child.Name))
             local shouldShow = snaplineTeamCheck and isEnemy or not snaplineTeamCheck
-            -- Skip snaplines for friends (unless teamkill and not protected)
             if friendsSet[child.Name] and (not teamkillEnabled or isProtectedFromTeamkill(child.Name)) then continue end
             if not shouldShow then continue end
 
@@ -1055,7 +961,6 @@ local function applySnaplines()
     end
 end
 
--- SELF ESP FUNCTIONS
 local function clearSelfBox()
     if selfBoxFolder then
         pcall(function() if type(selfBoxFolder) == "table" and selfBoxFolder.Container then selfBoxFolder.Container:Destroy() elseif selfBoxFolder.Destroy then selfBoxFolder:Destroy() end end)
@@ -1230,11 +1135,9 @@ local function applySelfOutline()
 end
 
 
--- UI CONTROLS
--- Camera controls (FOV lock)
+
 MainTab:Section({ Title = "Camera" })
 
--- Helper: find AlignOrientation named 'Gyro' under camera.plane_model (robust search)
 local function findGyroAlignOrientation()
     local cam = workspace.CurrentCamera or workspace:FindFirstChild("Camera")
     if not cam then return nil end
@@ -1254,13 +1157,11 @@ local function setCobraSpinEnabled(state)
     if ok and gyro and gyro:IsA("AlignOrientation") then
         pcall(function() gyro.PrimaryAxisOnly = state end)
     end
-    -- update UI toggle control if available
     if CobraToggleControl and CobraToggleControl.Set then
         pcall(function() CobraToggleControl:Set(state) end)
     end
 end
 
--- Friends scanning and logging
 local Players = game:GetService("Players")
 local function appendFriendLog(msg)
     local entry = "[+] " .. os.date("%X") .. " - " .. tostring(msg)
@@ -1271,19 +1172,14 @@ local function appendFriendLog(msg)
     end
 end
 
--- Script user detection and chat system
 local scriptUserCheckConnection = nil
 local lastScriptUserCount = 1
 local ScriptUserCountLabel = nil
-local function detectScriptUsers()
-    -- Attempt to detect if other players are using the script via RPC or shared signals
-    local newCount = 1 -- always count self
+local function detectScriptUsers() --ts does NOT fucking work nigga
+    local newCount = 1 
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= player and not scriptUsersSet[p.Name] then
-            -- Try to detect via typical RPC or script indicators
             pcall(function()
-                -- You can add custom detection logic here (e.g., check for specific remote signals, game objects, etc.)
-                -- For now, we'll use a placeholder that can be triggered by the script communicating
             end)
         end
         if scriptUsersSet[p.Name] then
@@ -1304,7 +1200,6 @@ local function detectScriptUsers()
 end
 
 local function broadcastScriptPresence()
-    -- Broadcast that this player is using the script (placeholder for RPC/signal broadcast)
     scriptUsersSet[player.Name] = true
     if not table.find(scriptUsersList, player.Name) then
         table.insert(scriptUsersList, player.Name)
@@ -1324,7 +1219,7 @@ end
 
 broadcastScriptPresence()
 
--- Ensure RWR GUI exists (top-center indicator)
+--Dogshit fucking skidded UI 💔
 local function ensureRWRGui()
     if rwrGui and rwrGui.Parent then return end
     local playerGui = player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui")
@@ -1364,14 +1259,11 @@ local function clearRWRGui()
     end
 end
 
--- Simple aiming detection: raycast from other model's Fuselage forward towards local plane model
--- Simple aiming detection: check specific gun cursor part under camera.plane_viewmodels
 local function isGunCursorAimingAtLocal(model)
     if not model then return false, nil end
     local cam = workspace.CurrentCamera or workspace:FindFirstChild("Camera")
     if not cam then return false, nil end
 
-    -- find local plane model under camera.plane_model
     local localPlane = nil
     local pm_local = cam:FindFirstChild("plane_model")
     if pm_local then
@@ -1384,18 +1276,15 @@ local function isGunCursorAimingAtLocal(model)
     end
     if not localPlane then return false, nil end
 
-    -- find the corresponding viewmodel under camera.plane_viewmodels
     local viewmodels = cam:FindFirstChild("plane_viewmodels")
     local vm = nil
     if viewmodels then
         vm = viewmodels:FindFirstChild(model.Name)
     end
     if not vm then
-        -- fallback: try searching model itself for the cursor part
         vm = model
     end
 
-    -- look for gun_3d_cursor_part under vm (recursive)
     local cursorPart = nil
     for _, d in ipairs(vm:GetDescendants()) do
         if d.Name == "gun_3d_cursor_part" and d:IsA("BasePart") then
@@ -1403,7 +1292,6 @@ local function isGunCursorAimingAtLocal(model)
             break
         end
     end
-    -- Also accept MeshPart
     if not cursorPart and vm then
         for _, d in ipairs(vm:GetDescendants()) do
             if d.Name == "gun_3d_cursor_part" and d:IsA("MeshPart") then
@@ -1454,7 +1342,6 @@ local function updateRWRStatus()
     end
 end
 
--- Prediction ESP GUI helpers
 local function ensurePredictionGui()
     if predictionGui and predictionGui.Parent then return end
     local playerGui = player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui")
@@ -1513,9 +1400,7 @@ local function updatePredictionESP()
 
     for _, model in ipairs(getOtherPlayerModels()) do
         if not (model and model:IsA("Model")) then
-            -- ignore invalid entries
         else
-            -- skip friends and teammates; only show for enemies
             local isEnemy = not (playerTeamName and teams and teams[playerTeamName] and teams[playerTeamName]:FindFirstChild(model.Name))
             if not isEnemy then
                 if predictionCircles[model] then
@@ -1523,7 +1408,6 @@ local function updatePredictionESP()
                     predictionCircles[model] = nil
                 end
             else
-                -- prefer Seat CFrame from camera viewmodels for velocity
                 local cam = workspace.CurrentCamera or workspace:FindFirstChild("Camera")
                 local seatPart = nil
                 if cam then
@@ -1535,7 +1419,6 @@ local function updatePredictionESP()
                         end
                     end
                 end
-                -- fallback: look inside model
                 if not seatPart then
                     seatPart = model:FindFirstChild("Seat", true) or model:FindFirstChild("Fuselage", true) or model.PrimaryPart
                 end
@@ -1583,7 +1466,6 @@ local function updatePredictionESP()
             end
         end
     end
-    -- cleanup entries for models that no longer exist
     for m, f in pairs(predictionCircles) do
         if not m or not m.Parent then
             pcall(function() f:Destroy() end)
@@ -1592,7 +1474,6 @@ local function updatePredictionESP()
     end
 end
 
--- Max Responsiveness control
 local function setMaxResponsiveness(state)
     maxRespEnabled = state
     local ok, gyro = pcall(findGyroAlignOrientation)
@@ -1603,7 +1484,6 @@ local function setMaxResponsiveness(state)
                 originalResponsiveness = gyro.Responsiveness
             end
             pcall(function() gyro.Responsiveness = 10000 end)
-            -- keep it forced
             if not maxRespKeepConn then
                 maxRespKeepConn = game:GetService("RunService").RenderStepped:Connect(function()
                     if maxRespEnabled and gyro and gyro.Parent then
@@ -1624,7 +1504,6 @@ local function setMaxResponsiveness(state)
     end
 end
 
--- Noclip functions
 local function applyNoclipToModel(model)
     if not model then return end
     for _, part in ipairs(model:GetDescendants()) do
@@ -1678,7 +1557,6 @@ local function setTerrainNoCollide(state)
     local tri = workspace:FindFirstChild("TriangleTerrain")
     if not tri then return end
     if state then
-        -- store originals and disable collisions on all parts under TriangleTerrain
         for _, part in ipairs(tri:GetDescendants()) do
             if part:IsA("BasePart") then
                 if not terrainOriginals[part] then
@@ -1711,7 +1589,6 @@ local function setTerrainNoCollide(state)
             pcall(function() terrainEnforceConn:Disconnect() end)
             terrainEnforceConn = nil
         end
-        -- restore originals
         for part, orig in pairs(terrainOriginals) do
             if part and part.Parent then
                 pcall(function()
@@ -1734,7 +1611,6 @@ local function updateFriendsScan()
             if isFriend and not friendsSet[p.Name] then
                 friendsSet[p.Name] = true
                 appendFriendLog("Friend detected: " .. p.Name)
-                -- Show notification
                 pcall(function()
                     WindUI:Notify({
                         Title = "Friend Joined",
@@ -1742,7 +1618,6 @@ local function updateFriendsScan()
                         Duration = 3,
                     })
                 end)
-                -- apply blue highlight if their model exists
                 for _, model in ipairs(getOtherPlayerModels()) do
                     if model.Name == p.Name and not friendHighlights[p.Name] then
                         local hl = Instance.new("Highlight")
@@ -1755,7 +1630,6 @@ local function updateFriendsScan()
                         hl.Parent = model
                         table.insert(filledHighlights, hl)
                         friendHighlights[p.Name] = hl
-                        -- Create full blue box ESP for friend (if not already)
                         if not boxBeamContainers[model] then
                             local container = createBoxAroundModel(model)
                             if container then
@@ -1767,7 +1641,6 @@ local function updateFriendsScan()
                                 boxBeamContainers[model] = container
                             end
                         end
-                        -- Attempt snapline to friend (blue)
                         pcall(function()
                             local localFus, _ = getLocalFuselage()
                             local targetFus = model:FindFirstChild("Fuselage", true)
@@ -1803,7 +1676,6 @@ Players.PlayerRemoving:Connect(function(p)
     if friendsSet[p.Name] then
         friendsSet[p.Name] = nil
         appendFriendLog("Friend left: " .. p.Name)
-        -- Show notification
         pcall(function()
             WindUI:Notify({
                 Title = "Friend Offline",
@@ -1815,7 +1687,6 @@ Players.PlayerRemoving:Connect(function(p)
             pcall(function() friendHighlights[p.Name]:Destroy() end)
             friendHighlights[p.Name] = nil
         end
-        -- remove any box ESP created for this friend's model(s)
         for model, folder in pairs(boxBeamContainers) do
             if model and model.Name == p.Name then
                 if folder then pcall(function() folder:Destroy() end) end
@@ -1825,7 +1696,6 @@ Players.PlayerRemoving:Connect(function(p)
     end
 end)
 
--- initial friends scan
 pcall(updateFriendsScan)
 
 MainTab:Toggle({
@@ -1853,7 +1723,6 @@ MainTab:Slider({
     end
 })
 
--- Teleport Section (added above Team Checks)
 MainTab:Section({ Title = "Teleport" })
 
 local teleportEnabled = false
@@ -1890,7 +1759,6 @@ MainTab:Slider({
     end
 })
 
--- helper: safe getNil using provided global helper if available
 local function getNilLocal(name, class)
     if type(getnilinstances) == "function" then
         for _, v in next, getnilinstances() do
@@ -1902,7 +1770,6 @@ local function getNilLocal(name, class)
     return nil
 end
 
--- Input handlers: teleport and FOV zoom
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local zoomedIn = false
@@ -1912,7 +1779,6 @@ local function doTeleport()
     local cam = workspace.CurrentCamera or workspace:FindFirstChild("Camera")
     local moved = false
 
-    -- helper to move a model or part forward based on its own forward vector
     local function moveForward(inst)
         if not inst then return end
         if inst:IsA("Model") then
@@ -1937,11 +1803,9 @@ local function doTeleport()
         end
     end
 
-    -- move the player's plane model under Camera.plane_model (e.g., MiG17F)
     if cam then
         local pm = cam:FindFirstChild("plane_model")
         if pm and pm:IsA("Model") or pm and typeof(pm) == "Instance" then
-            -- try to find a model matching player name, otherwise MiG17F, otherwise any model
             local targetModel = nil
             if pm:FindFirstChild(player.Name) then
                 targetModel = pm:FindFirstChild(player.Name)
@@ -1957,7 +1821,6 @@ local function doTeleport()
             end
         end
 
-        -- move targ_holder and targ_holder2 under Camera.Ignore if present
         local ign = cam:FindFirstChild("Ignore")
         if ign then
             local h1 = ign:FindFirstChild("targ_holder") or getNilLocal("targ_holder", "Part")
@@ -1967,7 +1830,6 @@ local function doTeleport()
         end
     end
 
-    -- fallback: move humanoid root part if nothing else moved
     if not moved then
         local char = player and (player.Character or (player.CharacterAdded and player.Character)) or nil
         if char then
@@ -1994,7 +1856,7 @@ local function setCameraFOV(targetFov)
         activeZoomTween:Play()
     end)
 end
--- Single unified input handler for teleport and zoom (ignores typing in textboxes)
+
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if input.UserInputType == Enum.UserInputType.Keyboard then
         if UserInputService:GetFocusedTextBox() then return end
@@ -2023,7 +1885,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- Teamkill toggle
 MainTab:Section({ Title = "Teamkill" })
 
 MainTab:Toggle({
@@ -2033,7 +1894,6 @@ MainTab:Toggle({
     Callback = function(state)
         teamkillEnabled = state
         if state then
-            -- when enabled: refresh all ESP/hitbox to show friends as enemies
             resetAllHitboxes()
             clearFilledESP()
             clearBoxESP()
@@ -2043,7 +1903,6 @@ MainTab:Toggle({
             if boxEspEnabled then applyBoxESP() end
             if snaplineEnabled then applySnaplines() end
         else
-            -- when disabled: refresh to restore friend protection
             resetAllHitboxes()
             clearFilledESP()
             clearBoxESP()
@@ -2056,7 +1915,6 @@ MainTab:Toggle({
     end
 })
 
--- Team Checks section follows
 MainTab:Section({ Title = "Team Checks" })
 
 MainTab:Toggle({
@@ -2081,7 +1939,6 @@ MainTab:Toggle({
         end
     })
 
--- Cobra Spin controls
 MainTab:Section({ Title = "Cobra Spin" })
 CobraToggleControl = MainTab:Toggle({
     Flag = "CobraSpin",
@@ -2097,12 +1954,10 @@ MainTab:Keybind({
     Title = "Cobra Spin Toggle Key",
     Value = "K",
     Callback = function(v)
-        -- toggle cobra spin when keybind pressed
         setCobraSpinEnabled(not cobraSpinEnabled)
     end
 })
 
--- RWR and Utilities
 MainTab:Section({ Title = "RWR [Beta]" })
 MainTab:Toggle({
     Flag = "RWR",
@@ -2144,10 +1999,6 @@ MainTab:Button({
     end
 })
 
--- Noclip toggle + keybind
--- noclip UI removed per user request; TriangleTerrain toggle handles map parts instead
-
--- Terrain CanCollide toggle
 MainTab:Section({ Title = "Terrain" })
 MainTab:Toggle({
     Flag = "TerrainNoCollide",
@@ -2158,13 +2009,9 @@ MainTab:Toggle({
     end,
 })
 
--- Logs section in Input tab (first thing)
 InputTab:Section({ Title = "Logs" })
--- Try to create a multiline TextArea/TextBox via WindUI; fallback to Input if unavailable
 local function createLogsControl(tab)
     local ctrl = nil
-    -- try TextArea
-    -- Prefer a large multiline Input/Textarea so logs appear in the big box.
     local ok, res = pcall(function()
         return tab:Input({
             Title = "Friend Logs",
@@ -2177,7 +2024,6 @@ local function createLogsControl(tab)
     if ok and res then
         ctrl = res
     else
-        -- Try WindUI's TextArea (older/newer variants)
         local ok2, res2 = pcall(function()
             return tab:TextArea({
                 Title = "Friend Logs",
@@ -2189,7 +2035,6 @@ local function createLogsControl(tab)
         if ok2 and res2 then
             ctrl = res2
         else
-            -- Try TextBox
             local ok3, res3 = pcall(function()
                 return tab:TextBox({
                     Title = "Friend Logs",
@@ -2201,7 +2046,6 @@ local function createLogsControl(tab)
             if ok3 and res3 then
                 ctrl = res3
             else
-                -- Final fallback to Input without textarea
                 local ok4, res4 = pcall(function()
                     return tab:Input({
                         Title = "Friend Logs",
@@ -2221,10 +2065,8 @@ end
 
 FriendsLogsInput = createLogsControl(InputTab)
 
--- Chat System UI
 InputTab:Section({ Title = "Script Chat & Players" })
 
--- Active script users count (Paragraph/Label)
 pcall(function()
     ScriptUserCountLabel = InputTab:Input({
         Title = "Active Script Users",
@@ -2236,7 +2078,6 @@ end)
 
 InputTab:Space()
 
--- Chat messages display (TextArea)
 local function createChatControl(tab)
     local ctrl = nil
     local ok, res = pcall(function()
@@ -2292,22 +2133,17 @@ end
 
 ChatMessagesInput = createChatControl(InputTab)
 
--- Chat Input with broadcast capability
 ChatInput = InputTab:Input({
     Title = "Send Message",
     Placeholder = "Type and press Enter...",
     Callback = function(text)
         if text and #text > 0 then
             appendChatMessage(player.Name, text)
-            ChatInput:Set("") -- clear input
-            -- Broadcast to other script users (via shared game object signal or RemoteEvent if available)
+            ChatInput:Set("")
             pcall(function()
-                -- Try to broadcast via RemoteEvent if script has access to shared service
                 local Players = game:GetService("Players")
                 for _, p in ipairs(Players:GetPlayers()) do
                     if p ~= player and scriptUsersSet[p.Name] then
-                        -- Signal other script users (placeholder for RPC broadcast)
-                        -- In a real scenario, you'd use RemoteEvent:FireClient or similar
                     end
                 end
             end)
@@ -2315,20 +2151,17 @@ ChatInput = InputTab:Input({
     end
 })
 
--- Handle Enter key for chat input
 local UserInputService = game:GetService("UserInputService")
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.Return then
         if UserInputService:GetFocusedTextBox() then
-            -- Input is focused, allow the return key to work in the textbox
             return
         end
     end
 end)
 
 
--- ESP Controls grouped into sections for clarity
 ESPTab:Section({ Title = "Player ESP" })
 
 ESPTab:Toggle({
@@ -2459,7 +2292,6 @@ ESPTab:Slider({
     Step = 0.01,
     Callback = function(val)
         snaplineThickness = val
-        -- update existing beams
         for _, folder in pairs(snaplineContainers) do
             if folder and folder.Parent then
                 local beam = folder:FindFirstChild("Snap_Beam")
@@ -2472,7 +2304,6 @@ ESPTab:Slider({
     end
 })
 
-    -- Prediction ESP controls
     ESPTab:Section({ Title = "Prediction ESP" })
     ESPTab:Toggle({
         Flag = "PredictionESP",
@@ -2550,7 +2381,6 @@ HitboxTab:Slider({
     end
 })
 
--- ESP Colors & Rainbow
 ESPTab:Section({ Title = "ESP Colors" })
 
 ESPTab:Colorpicker({
@@ -2640,7 +2470,6 @@ ESPTab:Toggle({
     Callback = function(state)
         rainbowAllEnabled = state
         if state then
-            -- save current user colors
             savedUserColors = {
                 filledEnemyColor = filledEnemyColor,
                 filledFriendlyColor = filledFriendlyColor,
@@ -2651,20 +2480,17 @@ ESPTab:Toggle({
                 lobbyBoxColor = lobbyBoxColor,
                 selfBoxColor = selfBoxColor,
             }
-            -- start rainbow task
             if not rainbowTask then
                 rainbowTask = task.spawn(function()
                     local hue = 0
                     while rainbowAllEnabled do
                         hue = (hue + 0.005) % 1
                         local col = Color3.fromHSV(hue, 1, 1)
-                        -- apply to filled highlights
                         for _, hl in ipairs(filledHighlights) do
                             if hl and hl:IsA("Highlight") then
                                 hl.FillColor = col
                             end
                         end
-                        -- apply to box edges
                         for _, folder in pairs(boxBeamContainers) do
                             if folder and folder.Parent then
                                 for _, epart in ipairs(folder:GetChildren()) do
@@ -2674,7 +2500,6 @@ ESPTab:Toggle({
                                 end
                             end
                         end
-                        -- lobby
                         if previewPlaneBoxFolder and previewPlaneBoxFolder.Parent then
                             for _, epart in ipairs(previewPlaneBoxFolder:GetChildren()) do
                                 if epart:IsA("BasePart") and epart.Name:match("^Edge_%d+_%d+") then
@@ -2682,7 +2507,6 @@ ESPTab:Toggle({
                                 end
                             end
                         end
-                        -- self box
                         if selfBoxFolder and type(selfBoxFolder) == "table" and selfBoxFolder.Container and selfBoxFolder.Container.Parent then
                             for _, epart in ipairs(selfBoxFolder.Container:GetChildren()) do
                                 if epart:IsA("BasePart") and epart.Name:match("^SelfEdge_%d+_%d+") then
@@ -2690,7 +2514,6 @@ ESPTab:Toggle({
                                 end
                             end
                         end
-                        -- snaplines
                         for _, folder in pairs(snaplineContainers) do
                             if folder and folder.Parent then
                                 local beam = folder:FindFirstChild("Snap_Beam")
@@ -2705,7 +2528,6 @@ ESPTab:Toggle({
                 end)
             end
         else
-            -- stop rainbow and restore user colors
             if savedUserColors and next(savedUserColors) then
                 filledEnemyColor = savedUserColors.filledEnemyColor or filledEnemyColor
                 filledFriendlyColor = savedUserColors.filledFriendlyColor or filledFriendlyColor
@@ -2716,7 +2538,6 @@ ESPTab:Toggle({
                 lobbyBoxColor = savedUserColors.lobbyBoxColor or lobbyBoxColor
                 selfBoxColor = savedUserColors.selfBoxColor or selfBoxColor
             end
-            -- reapply visuals
             if filledEspEnabled then applyFilledESP() end
             if boxEspEnabled then applyBoxESP() end
             if lobbyEspEnabled then applyLobbyESP() end
@@ -2796,7 +2617,6 @@ DangerSection:Button({
     end
 })
 
--- Config Tab (placed after Hitbox tab for visibility)
 
 
 task.spawn(function()
@@ -2824,7 +2644,6 @@ task.spawn(function()
         end
         
         if selfBoxEnabled then
-            -- Recreate if model changed
             local currentModel = getPlayerPlaneModel()
             if currentModel and (not selfBoxFolder or not selfBoxFolder.Model or selfBoxFolder.Model ~= currentModel) then
                 applySelfBox()
@@ -2841,7 +2660,6 @@ task.spawn(function()
     end
 end)
 
--- Real-time box update loop (every frame for smooth tracking)
 game:GetService("RunService").RenderStepped:Connect(function()
     if boxEspEnabled then
         updateBoxPositions()
@@ -2851,16 +2669,14 @@ game:GetService("RunService").RenderStepped:Connect(function()
         updateLobbyBoxPositions()
     end
     
-    -- Update Self Box if enabled
     if selfBoxEnabled then
         updateSelfBox()
     end
     
-    -- Auto-check script users periodically
+
     detectScriptUsers()
 
-    -- Enforce FOV lock: keep camera.FieldOfView equal to slider value when enabled,
-    -- otherwise ensure it resets to default 70.
+
     if camera then
         if fovEnabled then
             if camera.FieldOfView ~= fovValue then
@@ -2868,14 +2684,12 @@ game:GetService("RunService").RenderStepped:Connect(function()
             end 
         end
     end
-    -- RWR update
+
     if rwrEnabled then
         pcall(updateRWRStatus)
     end
-    -- Prediction ESP update
+
     if predictionEnabled then
         pcall(updatePredictionESP)
     end
 end)
-
-
